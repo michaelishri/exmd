@@ -35,15 +35,14 @@ func TestViewerLayout(t *testing.T) {
 	if m.out == nil {
 		t.Fatal("no render output")
 	}
-	// Sidebar block is a quarter of the window, clamped to [24, 40];
-	// 120/4 = 30.
+	// The sidebar is a fixed 50-column column.
 	if !m.outline.visible {
 		t.Fatal("sidebar should be visible at 120 cols")
 	}
-	if m.outline.width != 30 {
-		t.Fatalf("sidebar width = %d, want 30", m.outline.width)
+	if m.outline.width != 50 {
+		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-30-gutterWidth {
+	if m.content.Width != 120-50-gutterWidth {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()

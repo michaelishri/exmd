@@ -1,5 +1,5 @@
 // Package tui implements the md-exec viewer and run mode: the rendered
-// runbook on the left, the document outline as a shaded quarter-width column
+// runbook on the left, the document outline as a shaded 50-column sidebar
 // on the right. The visual language follows the OpenCode TUI — borderless,
 // separated by background shades, color reserved for state. The viewer is a
 // full-bleed reading surface with no header or footer; run mode keeps a
@@ -22,6 +22,7 @@ import (
 
 const (
 	minSidebarWidth = 90
+	sidebarCols     = 50
 	gutterWidth     = 2
 )
 
@@ -306,7 +307,7 @@ func (m *Model) relayout() {
 	m.outline.visible = w >= minSidebarWidth
 	sidebarW := 0
 	if m.outline.visible {
-		sidebarW = clamp(w/4, 24, 40)
+		sidebarW = sidebarCols
 	}
 	m.sidebarWidth = sidebarW
 	contentW := w
