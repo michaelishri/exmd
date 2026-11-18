@@ -231,6 +231,11 @@ block_env := (host_env − declared_names) ∪ current_globals
 implements masking (§2.2); the union means globals override, and declared-but-absent
 names are simply absent.
 
+Blocks run with their working directory set to **docdir** (§3.2), so relative paths
+in block code resolve against the document's directory, matching how script
+references resolve. This does not weaken isolation (§4.5): `cd` within a block still
+does not survive it.
+
 ### 4.3 State propagation (harvest)
 
 > Let `E_in` be the composed environment passed to a block. Let `E_out` be the

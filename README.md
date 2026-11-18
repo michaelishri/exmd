@@ -73,7 +73,7 @@ optimizes for human use.
 - [x] Document load path: frontmatter + block extraction (goldmark + yaml.v3)
 - [x] Headless utilities: `check`, `list`, `globals`, `print`
 - [x] TUI viewer: rendered content pane + outline/blocks sidebar (borderless, OpenCode-style)
-- [ ] Execution core: `bash` and `python3` adapters, env harvest
+- [x] Execution core: `bash` and `python3` adapters, env harvest
 - [ ] TUI execution UX: run controls, globals inspector, step-through
 
 ## Docs
