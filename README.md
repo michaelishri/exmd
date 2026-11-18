@@ -75,8 +75,9 @@ optimizes for human use.
 - [x] TUI viewer: rendered content pane + outline/blocks sidebar (borderless, OpenCode-style)
 - [x] Execution core: `bash` and `python3` adapters, env harvest
 - [x] TUI execution UX: `r` runs the document with live block output and a
-      live globals inspector; `v` returns; `md-exec DOC --set K=V` overrides
-      (deferred: block step-through, run cancellation)
+      live globals inspector; `n` steps one block at a time; `s` stops
+      (the engine terminates the current process group, SPEC §4.7);
+      `md-exec DOC --set K=V` overrides
 
 ## Docs
 

@@ -9,6 +9,8 @@ type keyMap struct {
 	Focus  key.Binding
 	Tab    key.Binding
 	Run    key.Binding
+	Step   key.Binding
+	Stop   key.Binding
 	Back   key.Binding
 	Help   key.Binding
 	Quit   key.Binding
@@ -36,6 +38,14 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("r"),
 			key.WithHelp("r", "run"),
 		),
+		Step: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "next block"),
+		),
+		Stop: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "stop"),
+		),
 		Back: key.NewBinding(
 			key.WithKeys("v", "esc"),
 			key.WithHelp("v", "back"),
@@ -52,7 +62,7 @@ func defaultKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Scroll, k.Focus, k.Tab, k.Run, k.Help, k.Quit}
+	return []key.Binding{k.Scroll, k.Focus, k.Run, k.Step, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
@@ -71,6 +81,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Scroll, pages, topBottom},
 		{k.Focus, k.Tab, k.Jump},
-		{k.Run, back, k.Help, k.Quit},
+		{k.Run, k.Step, k.Stop, back, k.Help, k.Quit},
 	}
 }

@@ -17,7 +17,7 @@ const version = "0.1.0-dev"
 const usage = `md-exec — executable Markdown (runbooks)
 
 Usage:
-  md-exec DOC                       open a runbook in the TUI
+  md-exec DOC [--set K=V]           open a runbook in the TUI (r runs, n steps, s stops)
   md-exec check DOC                 validate; report all diagnostics at once
   md-exec list DOC                  enumerate executable blocks
   md-exec globals DOC [--set K=V]   show the document's global variables

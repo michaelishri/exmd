@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func TestDemoRunbook(t *testing.T) {
 
 	var out bytes.Buffer
 	var warnings []string
-	result, err := Run(res.Doc, Options{
+	result, err := Run(context.Background(), res.Doc, Options{
 		Overrides: map[string]string{"JOB_NAME": "nightly"},
 		Stdout:    &out,
 		Events: func(ev Event) {

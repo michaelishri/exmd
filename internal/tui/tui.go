@@ -141,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		m.shutdownRun()
 		return tea.Quit, true
 
 	case "?":
@@ -149,17 +150,48 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "r":
-		if m.mode != modeRun && !m.run.active && len(m.doc.Blocks) > 0 {
-			m.mode = modeRun
-			m.resetRun()
-			m.relayout()
-			return m.startRunCmd(), true
+		if m.run.active {
+			return nil, true
 		}
-		if m.mode == modeRun && !m.run.active {
-			// Re-run.
-			m.resetRun()
-			m.relayout()
-			return m.startRunCmd(), true
+		if m.mode != modeRun {
+			if len(m.doc.Blocks) == 0 {
+				return nil, true
+			}
+			// Entering run mode always starts fresh.
+			return m.beginRun(true), true
+		}
+		// In run mode: continue remaining, or restart a finished run.
+		if m.run.finished || m.run.err != nil ||
+			(m.run.result != nil && m.run.result.Failed != nil) {
+			return m.beginRun(true), true
+		}
+		if m.run.session != nil && m.run.session.Remaining() > 0 {
+			return m.runRemainingCmd(), true
+		}
+		return nil, true
+
+	case "n":
+		if m.run.active {
+			return nil, true
+		}
+		if m.mode != modeRun {
+			if len(m.doc.Blocks) == 0 {
+				return nil, true
+			}
+			// n from the viewer steps straight into run mode.
+			return m.beginRun(false), true
+		}
+		if m.run.session == nil || m.run.session.Remaining() == 0 ||
+			(m.run.result != nil && m.run.result.Failed != nil) {
+			return nil, true
+		}
+		return m.stepCmd(), true
+
+	case "s":
+		if m.mode == modeRun && m.run.active && m.run.cancel != nil {
+			// §4.7: the engine terminates the current process group and
+			// the run stops there.
+			m.run.cancel()
 		}
 		return nil, true
 

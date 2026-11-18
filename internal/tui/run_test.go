@@ -48,8 +48,8 @@ func TestRunMode(t *testing.T) {
 	if got.run.active {
 		t.Fatal("run still active")
 	}
-	if !got.run.done {
-		t.Fatal("run not done")
+	if !got.run.finished {
+		t.Fatal("run not finished")
 	}
 	if got.run.result == nil || got.run.result.Failed != nil {
 		t.Fatalf("demo run failed: %+v", got.run.result)
@@ -117,5 +117,88 @@ func TestRunModeFailure(t *testing.T) {
 	status := got.runStatus()
 	if !strings.Contains(status, "failed at block 2 (status 3)") {
 		t.Fatalf("status = %q", status)
+	}
+}
+
+func TestStepMode(t *testing.T) {
+	// n enters run mode and steps one block at a time; r runs the rest.
+	m := newViewer(t, 120, 40)
+
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	got := mm.(Model)
+	if got.mode != modeRun {
+		t.Fatal("n did not enter run mode")
+	}
+	if got.run.active {
+		t.Fatal("stepping should not start a run")
+	}
+
+	// Step block 1.
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	got = mm.(Model)
+	got = pump(t, got, cmd)
+
+	if got.run.active || got.run.finished {
+		t.Fatalf("after one step: active=%v finished=%v", got.run.active, got.run.finished)
+	}
+	if !got.run.blocks[0].hasEnd || got.run.blocks[0].failed {
+		t.Fatalf("block 1 record wrong: %+v", got.run.blocks[0])
+	}
+	if got.run.blocks[1].hasEnd {
+		t.Fatal("block 2 should still be pending")
+	}
+	if got.run.globals["JOB_NAME"] != "nightly" {
+		t.Fatalf("override missing from globals: %v", got.run.globals)
+	}
+	status := got.runStatus()
+	if !strings.Contains(status, "after block 1/12") {
+		t.Fatalf("status = %q", status)
+	}
+
+	// Step block 2, then run the rest.
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	got = mm.(Model)
+	got = pump(t, got, cmd)
+	if got.run.result.BlocksRun != 2 {
+		t.Fatalf("blocks run = %d, want 2", got.run.result.BlocksRun)
+	}
+
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = mm.(Model)
+	got = pump(t, got, cmd)
+
+	if !got.run.finished {
+		t.Fatal("r did not complete the run")
+	}
+	if !strings.Contains(got.runStatus(), "done · 12 blocks") {
+		t.Fatalf("status = %q", got.runStatus())
+	}
+}
+
+func TestStopRun(t *testing.T) {
+	// s cancels the run: the engine kills the current process group (§4.7)
+	// and the run stops at that block.
+	m := newViewerFromDoc(t, 120, 40, "../../internal/exec/testdata/sleep.md", nil)
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got := mm.(Model)
+	if !got.run.active {
+		t.Fatal("run not active")
+	}
+
+	// Stop immediately (the block sleeps for 5s).
+	got.run.cancel()
+	got = pump(t, got, cmd)
+
+	if got.run.active {
+		t.Fatal("run still active after stop")
+	}
+	if got.run.result == nil || !got.run.result.Interrupted {
+		t.Fatalf("expected interruption, got %+v", got.run.result)
+	}
+	if got.run.result.BlocksRun != 1 {
+		t.Fatalf("blocks run = %d, want 1", got.run.result.BlocksRun)
+	}
+	if !strings.Contains(got.runStatus(), "stopped at block 1") {
+		t.Fatalf("status = %q", got.runStatus())
 	}
 }

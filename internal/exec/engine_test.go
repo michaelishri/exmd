@@ -2,10 +2,12 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/michaelishri/md-exec/internal/doc"
 )
@@ -13,6 +15,10 @@ import (
 // runDoc loads a testdata document and runs it with buffers for output and
 // a collected event log.
 func runDoc(t *testing.T, name string, tune func(*Options)) (*RunResult, *bytes.Buffer, *bytes.Buffer, []Event) {
+	return runDocCtx(t, context.Background(), name, tune)
+}
+
+func runDocCtx(t *testing.T, ctx context.Context, name string, tune func(*Options)) (*RunResult, *bytes.Buffer, *bytes.Buffer, []Event) {
 	t.Helper()
 	res, err := doc.Load(filepath.Join("testdata", name))
 	if err != nil {
@@ -34,7 +40,7 @@ func runDoc(t *testing.T, name string, tune func(*Options)) (*RunResult, *bytes.
 		tune(&opts)
 	}
 
-	result, err := Run(res.Doc, opts)
+	result, err := Run(ctx, res.Doc, opts)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -222,8 +228,93 @@ func TestUndeclaredOverrideRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Run(res.Doc, Options{Overrides: map[string]string{"NOT_DECLARED": "x"}})
+	_, err = Run(context.Background(), res.Doc, Options{Overrides: map[string]string{"NOT_DECLARED": "x"}})
 	if err == nil || !strings.Contains(err.Error(), "unknown global `NOT_DECLARED`") {
 		t.Fatalf("expected refusal, got %v", err)
 	}
+}
+
+func TestCancelInterruptsBlock(t *testing.T) {
+	// The block sleeps for 5s; cancelling after 200ms must terminate the
+	// process group quickly (§4.7) and stop the run there.
+	ctx, cancel := context.WithCancel(context.Background())
+	timer := time.AfterFunc(200*time.Millisecond, cancel)
+	defer timer.Stop()
+
+	start := time.Now()
+	result, _, _, _ := runDocCtx(t, ctx, "sleep.md", nil)
+	elapsed := time.Since(start)
+
+	if result.Failed == nil || result.Failed.Index != 1 {
+		t.Fatalf("failed = %+v, want block 1", result.Failed)
+	}
+	if !result.Interrupted {
+		t.Fatal("expected Interrupted")
+	}
+	if result.BlocksRun != 1 {
+		t.Fatalf("blocks run = %d, want 1", result.BlocksRun)
+	}
+	if elapsed > 3*time.Second {
+		t.Fatalf("cancellation took %v — the process group was not killed", elapsed)
+	}
+}
+
+func TestSessionStepping(t *testing.T) {
+	res, err := doc.Load(filepath.Join("testdata", "flow.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewSession(res.Doc, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	// Step through blocks one at a time; state carries between steps (§4.3).
+	var lastOut bytes.Buffer
+	opts := s.opts // no output writers; capture via engine events instead
+	_ = opts
+	events := []Event{}
+	emit := func(ev Event) { events = append(events, ev) }
+
+	br := s.RunNext(context.Background(), emit)
+	if br.Done || br.Block.Index != 1 {
+		t.Fatalf("first step = %+v", br)
+	}
+	if s.Remaining() != 3 {
+		t.Fatalf("remaining = %d, want 3", s.Remaining())
+	}
+
+	// After block 1 the exported global is visible to the session state.
+	if s.Globals()["GREETING"] != "hello world" {
+		t.Fatalf("GREETING = %q", s.Globals()["GREETING"])
+	}
+
+	br = s.RunNext(context.Background(), emit)
+	if br.Block.Index != 2 {
+		t.Fatalf("second step = %+v", br)
+	}
+
+	// Run the rest.
+	for {
+		br = s.RunNext(context.Background(), emit)
+		if br.Done {
+			break
+		}
+	}
+	if s.Result().BlocksRun != 4 {
+		t.Fatalf("blocks run = %d", s.Result().BlocksRun)
+	}
+
+	// Events must include the initial globals snapshot and one per harvest.
+	var snapshots int
+	for _, ev := range events {
+		if ev.Kind == EventGlobals {
+			snapshots++
+		}
+	}
+	if snapshots != 5 { // initial + one per block
+		t.Fatalf("globals snapshots = %d, want 5", snapshots)
+	}
+	_ = lastOut
 }

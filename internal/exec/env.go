@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+// shellManaged names are maintained by the interpreter itself (bash sets
+// PWD/SHLVL/OLDPWD on startup and _ per external command). They appear in
+// every block's environment delta but are infrastructure, not document
+// state — adapters MUST suppress them (SPEC.md §5.1.6).
+var shellManaged = map[string]struct{}{
+	"_": {}, "OLDPWD": {}, "PWD": {}, "SHLVL": {},
+}
+
 // compose builds a block's process environment (SPEC.md §4.2):
 //
 //	block_env := (host_env − declared_names) ∪ current_globals

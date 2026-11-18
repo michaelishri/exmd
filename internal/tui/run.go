@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -14,7 +16,9 @@ import (
 
 // Run mode streams block execution into the content pane while the sidebar
 // becomes a live globals table. State arrives as engine events (SPEC.md
-// §4.8); everything rendered here derives from them.
+// §4.8); everything rendered here derives from them. `n` steps one block,
+// `r` runs the rest, `s` stops (the engine terminates the current process
+// group, §4.7).
 
 // tea messages for the run pipeline.
 type runEventMsg struct{ ev exec.Event }
@@ -62,8 +66,8 @@ func (br *blockRun) flush() {
 
 // runState is the mode's whole state.
 type runState struct {
-	active   bool
-	done     bool
+	active   bool // a RunNext is in flight
+	finished bool // whole document completed
 	blocks   []blockRun
 	warnings []string
 	globals  map[string]string
@@ -71,9 +75,21 @@ type runState struct {
 	err      error
 	ch       chan exec.Event
 	lastLen  int // content length at last render, for follow-bottom
+
+	session *exec.Session
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func (m *Model) resetRun() {
+	if m.run.session != nil {
+		m.run.session.Close()
+		m.run.session = nil
+	}
+	if m.run.cancel != nil {
+		m.run.cancel()
+		m.run.cancel = nil
+	}
 	blocks := make([]blockRun, len(m.doc.Blocks))
 	for i, b := range m.doc.Blocks {
 		blocks[i] = blockRun{block: b, status: -1}
@@ -81,24 +97,62 @@ func (m *Model) resetRun() {
 	m.run = runState{blocks: blocks, globals: map[string]string{}}
 }
 
-// startRunCmd launches the engine in a command goroutine. Events flow
-// through the channel; the listen command turns each into a message.
-func (m *Model) startRunCmd() tea.Cmd {
+// beginRun enters run mode with a fresh session; runAll launches every
+// remaining block, otherwise the run starts empty (step mode).
+func (m *Model) beginRun(runAll bool) tea.Cmd {
+	m.mode = modeRun
+	m.resetRun()
+
+	s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
+	if err != nil {
+		m.run.err = err
+		m.run.finished = true
+		m.setRunContent()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.run.session, m.run.ctx, m.run.cancel = s, ctx, cancel
+	if runAll {
+		return m.runRemainingCmd()
+	}
+	return nil
+}
+
+// runRemainingCmd runs every remaining block of the session, emitting
+// events through the channel; it ends at the first failure or cancellation
+// (§4.7).
+func (m *Model) runRemainingCmd() tea.Cmd {
 	ch := make(chan exec.Event, eventChanBuffer)
 	m.run.ch = ch
 	m.run.active = true
+	emit := func(ev exec.Event) { ch <- ev }
+
 	runCmd := func() tea.Msg {
-		result, err := exec.Run(m.doc, exec.Options{
-			Overrides: m.overrides,
-			Events:    func(ev exec.Event) { ch <- ev },
-		})
-		close(ch)
-		if err != nil {
-			return runErrMsg{err}
+		for {
+			br := m.run.session.RunNext(m.run.ctx, emit)
+			if br.Done || br.Status != 0 {
+				break
+			}
 		}
-		return runDoneMsg{result}
+		close(ch)
+		return runDoneMsg{m.run.session.Result()}
 	}
 	return tea.Batch(runCmd, m.listenCmd())
+}
+
+// stepCmd runs exactly one block.
+func (m *Model) stepCmd() tea.Cmd {
+	ch := make(chan exec.Event, eventChanBuffer)
+	m.run.ch = ch
+	m.run.active = true
+	emit := func(ev exec.Event) { ch <- ev }
+
+	step := func() tea.Msg {
+		m.run.session.RunNext(m.run.ctx, emit)
+		close(ch)
+		return runDoneMsg{m.run.session.Result()}
+	}
+	return tea.Batch(step, m.listenCmd())
 }
 
 func (m *Model) listenCmd() tea.Cmd {
@@ -114,7 +168,7 @@ func (m *Model) listenCmd() tea.Cmd {
 // applyRunEvent folds an engine event into the run state and refreshes the
 // viewport.
 func (m *Model) applyRunEvent(ev exec.Event) {
-	if m.run.done {
+	if !m.run.active {
 		return
 	}
 	switch ev.Kind {
@@ -151,18 +205,6 @@ func (m *Model) blockRun(b *doc.Block) *blockRun {
 	return &m.run.blocks[b.Index-1]
 }
 
-// setRunContent refreshes the viewport's run-mode content, pinning to the
-// bottom while the reader is already there (live output streaming).
-func (m *Model) setRunContent() {
-	lines := m.runViewLines()
-	was := m.content.YOffset+m.content.Height >= m.run.lastLen
-	m.content.SetContent(strings.Join(lines, "\n"))
-	if was {
-		m.content.GotoBottom()
-	}
-	m.run.lastLen = len(lines)
-}
-
 // finalizeRun drains any buffered events, then records the outcome.
 func (m *Model) finalizeRun(result *exec.RunResult, err error) {
 drain:
@@ -181,10 +223,24 @@ drain:
 		m.run.blocks[i].flush()
 	}
 	m.run.active = false
-	m.run.done = true
 	m.run.result = result
 	m.run.err = err
+	m.run.finished = err == nil && result != nil &&
+		result.Failed == nil && !result.Interrupted &&
+		m.run.session != nil && m.run.session.Remaining() == 0
 	m.setRunContent()
+}
+
+// setRunContent refreshes the viewport's run-mode content, pinning to the
+// bottom while the reader is already there (live output streaming).
+func (m *Model) setRunContent() {
+	lines := m.runViewLines()
+	was := m.content.YOffset+m.content.Height >= m.run.lastLen
+	m.content.SetContent(strings.Join(lines, "\n"))
+	if was {
+		m.content.GotoBottom()
+	}
+	m.run.lastLen = len(lines)
 }
 
 // runViewLines builds the run-mode lines for the content viewport.
@@ -269,20 +325,45 @@ func (m *Model) runStatus() string {
 	var left string
 	switch {
 	case m.run.active:
-		left = accentStyle.Render("running…")
+		left = accentStyle.Render("running… (s to stop)")
 	case m.run.err != nil:
 		left = errStyle.Render("run failed")
+	case m.run.result != nil && m.run.result.Failed != nil && m.run.result.Interrupted:
+		left = warnStyle.Render(fmt.Sprintf("stopped at block %d · r to continue, v to go back",
+			m.run.result.Failed.Index))
 	case m.run.result != nil && m.run.result.Failed != nil:
 		left = errStyle.Render(fmt.Sprintf("failed at block %d (status %d) · v to go back",
 			m.run.result.Failed.Index, m.run.result.ExitStatus))
-	case m.run.done:
+	case m.run.finished:
 		left = successStyle.Render(fmt.Sprintf("done · %d blocks", m.run.result.BlocksRun))
+	case m.run.result != nil && m.run.result.BlocksRun > 0:
+		remaining := 0
+		if m.run.session != nil {
+			remaining = m.run.session.Remaining()
+		}
+		left = infoStyle.Render(fmt.Sprintf("after block %d/%d · n next · r run rest · v back",
+			m.run.result.BlocksRun, m.run.result.BlocksRun+remaining))
 	default:
-		left = infoStyle.Render(fmt.Sprintf("r to run · %d blocks", len(m.run.blocks)))
+		left = infoStyle.Render(fmt.Sprintf("r to run · n to step · %d blocks", len(m.run.blocks)))
 	}
 	right := ""
 	if len(m.run.warnings) > 0 {
 		right = warnStyle.Render(fmt.Sprintf("%d warning(s)", len(m.run.warnings)))
 	}
 	return composeLeftRight(left, right, m.width)
+}
+
+// shutdownRun cancels an in-flight run before the program exits (§4.7):
+// the engine terminates the current process group; give it a moment.
+func (m *Model) shutdownRun() {
+	if m.run.cancel != nil {
+		m.run.cancel()
+	}
+	if m.run.active {
+		time.Sleep(300 * time.Millisecond)
+	}
+	if m.run.session != nil {
+		m.run.session.Close()
+		m.run.session = nil
+	}
 }
