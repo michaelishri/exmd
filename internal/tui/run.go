@@ -102,6 +102,9 @@ func (m *Model) resetRun() {
 func (m *Model) beginRun(runAll bool) tea.Cmd {
 	m.mode = modeRun
 	m.resetRun()
+	// Run mode keeps the hairline + status bar for run state, so the pane
+	// heights differ from the viewer's.
+	m.relayout()
 
 	s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
 	if err != nil {

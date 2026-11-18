@@ -36,30 +36,35 @@ func TestViewerLayout(t *testing.T) {
 		t.Fatal("no render output")
 	}
 	// Sidebar block is a quarter of the window, clamped to [24, 40];
-	// 120/4 = 30, and the painted column is that minus its ring cells.
+	// 120/4 = 30.
 	if !m.outline.visible {
 		t.Fatal("sidebar should be visible at 120 cols")
 	}
-	if m.outline.width != 30-2*ringSize {
-		t.Fatalf("sidebar width = %d, want %d", m.outline.width, 30-2*ringSize)
+	if m.outline.width != 30 {
+		t.Fatalf("sidebar width = %d, want 30", m.outline.width)
 	}
-	if m.content.Width != 120-30-gutterWidth-2*ringSize-2*paneInset {
+	if m.content.Width != 120-30-gutterWidth {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()
+	// The reading surface is content + sidebar only: no header row (title,
+	// path, chips), no sidebar title, no footer, no focus rings.
+	if strings.Contains(v, "spec v1") || strings.Contains(v, "examples/demo/demo.md") {
+		t.Fatal("header chrome leaked into the view")
+	}
+	if strings.Contains(v, "j/k scroll") || strings.Contains(v, "q quit") {
+		t.Fatal("footer should be gone")
+	}
+	if strings.Contains(v, "┌") || strings.Contains(v, "└") {
+		t.Fatal("focus rings should be gone")
+	}
+	// The document itself is still there (the h1 renders in the content).
 	if !strings.Contains(v, "md-exec feature tour") {
-		t.Fatal("title missing from header")
+		t.Fatal("document content missing")
 	}
-	if !strings.Contains(v, "Outline") {
-		t.Fatal("sidebar title missing")
-	}
-	if !strings.Contains(v, "spec v1") {
-		t.Fatal("spec chip missing")
-	}
-	// 3/4 pane: content starts at the left edge; the focused pane carries
-	// the focus ring (content is focused by default), so exactly one ring.
-	if n := strings.Count(v, "┌"); n != 1 {
-		t.Fatalf("focus rings = %d, want exactly 1", n)
+	// The viewer viewport spans the full window height.
+	if m.content.Height != 40 {
+		t.Fatalf("viewer viewport height = %d, want 40", m.content.Height)
 	}
 }
 

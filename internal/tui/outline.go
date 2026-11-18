@@ -111,19 +111,14 @@ func (o *outlineModel) last() bool {
 // without packing text edge to edge.
 const panePad = 2
 
-// view renders the sidebar as `height` shaded rows.
+// view renders the sidebar as `height` shaded rows of entries — no title
+// row; the entries themselves are the surface.
 func (o *outlineModel) view(height int) string {
 	if !o.visible {
 		return ""
 	}
 	rows := make([]string, height)
-	title := "Outline"
-	if o.tab == tabBlocks {
-		title = "Blocks"
-	}
-	rows[0] = tabTitleStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + title)
-
-	visible := height - 1
+	visible := height
 	if visible < 1 {
 		visible = 1
 	}
@@ -143,16 +138,16 @@ func (o *outlineModel) view(height int) string {
 		if o.tab == tabBlocks {
 			empty = "no blocks"
 		}
-		rows[1] = emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
+		rows[0] = emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
 	}
 
 	pad := strings.Repeat(" ", panePad)
 	textBudget := o.width - 2*panePad - 2
-	for r := 1; r < height; r++ {
+	for r := 0; r < height; r++ {
 		if rows[r] != "" {
 			continue
 		}
-		idx := start + r - 1
+		idx := start + r
 		if idx >= len(o.entries) {
 			rows[r] = rowStyle.Width(o.width).Render("")
 			continue

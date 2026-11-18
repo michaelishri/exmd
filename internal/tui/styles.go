@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/michaelishri/md-exec/internal/theme"
@@ -14,10 +13,6 @@ var t = theme.Dark
 // OpenCode-adjacent visual language: no borders — separation comes from
 // background shades — muted chrome, and color reserved for state.
 var (
-	titleStyle lipgloss.Style
-	pathStyle  lipgloss.Style
-	chipStyle  lipgloss.Style
-
 	rowStyle      lipgloss.Style
 	selRowStyle   lipgloss.Style
 	markerStyle   lipgloss.Style
@@ -30,10 +25,6 @@ var (
 	accentStyle     lipgloss.Style
 	successStyle    lipgloss.Style
 	warnStyle       lipgloss.Style
-
-	// ringStyle draws the focus ring around the focused pane. Focus is
-	// state, and primary is the state color.
-	ringStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -46,18 +37,6 @@ func SetTheme(th theme.Theme) {
 }
 
 func buildStyles() {
-	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(t.Text))
-
-	pathStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
-
-	chipStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted)).
-		Background(lipgloss.Color(t.BackgroundElement)).
-		Padding(0, 1)
-
 	rowStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted)).
 		Background(lipgloss.Color(t.BackgroundPanel))
@@ -98,20 +77,4 @@ func buildStyles() {
 
 	warnStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Warning))
-
-	ringStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary))
-}
-
-// tuneHelp mutes the help model's palette so the status bar whispers.
-func tuneHelp(h *help.Model) {
-	s := h.Styles
-	s.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color(t.TextMuted))
-	s.ShortDesc = lipgloss.NewStyle().Foreground(lipgloss.Color(t.TextMuted))
-	s.ShortSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color(t.Border))
-	s.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color(t.TextMuted))
-	s.FullDesc = lipgloss.NewStyle().Foreground(lipgloss.Color(t.TextMuted))
-	s.FullSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color(t.Border))
-	s.Ellipsis = lipgloss.NewStyle().Foreground(lipgloss.Color(t.TextMuted))
-	h.Styles = s
 }

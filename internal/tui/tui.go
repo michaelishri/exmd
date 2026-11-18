@@ -1,15 +1,14 @@
 // Package tui implements the md-exec viewer and run mode: the rendered
 // runbook on the left, the document outline as a shaded quarter-width column
-// on the right, and a single-line status bar. The visual language follows
-// the OpenCode TUI — borderless, separated by background shades, color
-// reserved for state.
+// on the right. The visual language follows the OpenCode TUI — borderless,
+// separated by background shades, color reserved for state. The viewer is a
+// full-bleed reading surface with no header or footer; run mode keeps a
+// status bar because it carries the run state.
 package tui
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -52,9 +51,6 @@ type Model struct {
 	content      viewport.Model
 	outline      outlineModel
 	focus        focusArea
-	help         help.Model
-	showHelp     bool
-	keys         keyMap
 	renderErr    string
 	sidebarWidth int
 
@@ -72,8 +68,6 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		path:      res.Doc.Path,
 		content:   viewport.New(0, 0),
 		outline:   newOutline(),
-		help:      help.New(),
-		keys:      defaultKeyMap(),
 		focus:     focusContent,
 		mode:      modeView,
 		overrides: overrides,
@@ -81,7 +75,6 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		run:       runState{globals: map[string]string{}},
 	}
 	m.content.MouseWheelEnabled = true
-	tuneHelp(&m.help)
 	return m
 }
 
@@ -146,11 +139,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "q", "ctrl+c":
 		m.shutdownRun()
 		return tea.Quit, true
-
-	case "?":
-		m.showHelp = !m.showHelp
-		m.relayout()
-		return nil, true
 
 	case "r":
 		if m.run.active {
@@ -316,25 +304,24 @@ func (m *Model) relayout() {
 	}
 
 	m.outline.visible = w >= minSidebarWidth
-	// sidebarTotal is the sidebar's full block width (ring + painted
-	// column); m.sidebarWidth is the painted column itself — the sidebar
-	// ring hugs it, with no inset.
-	sidebarTotal := 0
+	sidebarW := 0
 	if m.outline.visible {
-		sidebarTotal = clamp(w/4, 24, 40)
+		sidebarW = clamp(w/4, 24, 40)
 	}
-	m.sidebarWidth = max(0, sidebarTotal-2*ringSize)
-	// Content reserves its ring cells plus the inset gap on every side.
-	contentW := w - 2*ringSize - 2*paneInset
+	m.sidebarWidth = sidebarW
+	contentW := w
 	if m.outline.visible {
-		contentW -= sidebarTotal + gutterWidth
+		contentW = w - sidebarW - gutterWidth
 	}
 	contentW = max(10, contentW)
 
-	helpLines := lipgloss.Height(m.statusView())
-	bodyH := h - 3 - (helpLines - 1)
-	bodyH -= 2*ringSize + 2*paneInset
-	bodyH = max(1, bodyH)
+	// The viewer is a full-bleed reading surface; run mode keeps the
+	// hairline and status bar so run state stays visible.
+	chrome := 0
+	if m.mode == modeRun {
+		chrome = 2
+	}
+	bodyH := max(1, h-chrome)
 
 	m.content.Width = contentW
 	m.content.Height = bodyH
@@ -431,136 +418,62 @@ func (m Model) View() string {
 		return m.content.View()
 	}
 	var sb strings.Builder
-	sb.WriteString(m.headerView())
-	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
-	sb.WriteByte('\n')
-	sb.WriteString(m.sepView())
-	sb.WriteByte('\n')
-	sb.WriteString(m.statusView())
-	return sb.String()
-}
-
-func (m Model) headerView() string {
-	left := titleStyle.Render(m.doc.HeadingText()) + " " + pathStyle.Render(m.path)
-	chips := []string{
-		chipStyle.Render(fmt.Sprintf("spec v%d", m.doc.SpecVersion)),
-		chipStyle.Render(fmt.Sprintf("%d globals", len(m.doc.Globals))),
-		chipStyle.Render(fmt.Sprintf("%d blocks", len(m.doc.Blocks))),
+	if m.mode == modeRun {
+		// Run mode keeps the hairline and status bar: they carry the run
+		// state (running, stopped, failed, done).
+		sb.WriteByte('\n')
+		sb.WriteString(m.sepView())
+		sb.WriteByte('\n')
+		sb.WriteString(m.runStatus())
 	}
-	return composeLeftRight(left, strings.Join(chips, " "), m.width)
+	return sb.String()
 }
 
 func (m Model) bodyView() string {
 	if m.mode == modeRun {
-		contentBlock := ringPane(m.content.View(), m.focus == focusContent, m.content.Width, paneInset)
+		content := m.content.View()
 		if !m.outline.visible {
-			return contentBlock
+			return content
 		}
-		gutter := make([]string, m.content.Height+2*ringSize+2*paneInset)
+		gutter := make([]string, m.content.Height)
 		for i := range gutter {
 			gutter[i] = strings.Repeat(" ", gutterWidth)
 		}
 		return lipgloss.JoinHorizontal(lipgloss.Top,
-			contentBlock,
+			content,
 			strings.Join(gutter, "\n"),
-			ringPane(m.globalsView(m.content.Height+2*paneInset), false, m.sidebarWidth, 0),
+			m.globalsView(m.content.Height),
 		)
 	}
 
-	contentInner := m.content.View()
 	if m.renderErr != "" {
-		contentInner = errStyle.Render("render error: " + m.renderErr)
-	} else if m.out == nil {
-		contentInner = ""
+		return errStyle.Render("render error: " + m.renderErr)
 	}
-	contentBlock := ringPane(contentInner, m.focus == focusContent, m.content.Width, paneInset)
+	if m.out == nil {
+		return ""
+	}
+	content := m.content.View()
 	if !m.outline.visible {
-		return contentBlock
+		return content
 	}
-	gutter := make([]string, m.content.Height+2*ringSize+2*paneInset)
+	gutter := make([]string, m.content.Height)
 	for i := range gutter {
 		gutter[i] = strings.Repeat(" ", gutterWidth)
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
-		contentBlock,
+		content,
 		strings.Join(gutter, "\n"),
-		ringPane(m.outlineView(), m.focus == focusOutline, m.sidebarWidth, 0),
+		m.outlineView(),
 	)
 }
 
-// ringSize is the number of cells the focus ring occupies on every side of
-// a pane, and paneInset the blank gap between the ring and the pane
-// content. Both are always reserved, ringed or not, so toggling focus
-// never shifts the layout.
-const (
-	ringSize  = 1
-	paneInset = 1
-)
-
-// ringPane wraps a pane in its reserved ring cells. When on, the ring is
-// drawn in the primary (state) color; otherwise the cells stay blank. The
-// inset blank cells sit between the ring and the content.
-func ringPane(inner string, on bool, w, inset int) string {
-	spanW := w + 2*inset
-	top := strings.Repeat(" ", spanW+2*ringSize)
-	bottom := top
-	left, right := " ", " "
-	if on {
-		top = ringStyle.Render("┌" + strings.Repeat("─", spanW) + "┐")
-		bottom = ringStyle.Render("└" + strings.Repeat("─", spanW) + "┘")
-		left, right = ringStyle.Render("│"), ringStyle.Render("│")
-	}
-	lines := strings.Split(inner, "\n")
-	gap := strings.Repeat(" ", spanW)
-	out := make([]string, 0, len(lines)+2+2*inset)
-	out = append(out, top)
-	for i := 0; i < inset; i++ {
-		out = append(out, left+gap+right)
-	}
-	for _, l := range lines {
-		if n := ansi.StringWidth(l); n < w {
-			l += strings.Repeat(" ", w-n)
-		} else if n > w {
-			l = ansi.Truncate(l, w, "…")
-		}
-		out = append(out, left+strings.Repeat(" ", inset)+l+strings.Repeat(" ", inset)+right)
-	}
-	for i := 0; i < inset; i++ {
-		out = append(out, left+gap+right)
-	}
-	out = append(out, bottom)
-	return strings.Join(out, "\n")
-}
-
 func (m Model) outlineView() string {
-	// The sidebar ring has no inset, so its column needs two extra rows to
-	// match the inset content block's height.
-	return m.outline.view(m.content.Height + 2*paneInset)
+	return m.outline.view(m.content.Height)
 }
 
 func (m Model) sepView() string {
 	return sepStyle.Render(strings.Repeat("─", max(1, m.width)))
-}
-
-// statusView is the bottom bar: muted key hints or run state on the left,
-// position info on the right.
-func (m Model) statusView() string {
-	if m.mode == modeRun {
-		return m.runStatus()
-	}
-	m.help.ShowAll = m.showHelp
-	left := m.help.View(m.keys)
-	total := 0
-	if m.out != nil {
-		total = len(m.out.Lines)
-	}
-	info := infoStyle.Render(fmt.Sprintf("L %d/%d · %d%%",
-		min(m.content.YOffset+1, max(total, 1)),
-		max(total, 1),
-		int(m.content.ScrollPercent()*100),
-	))
-	return composeLeftRight(left, info, m.width)
 }
 
 // composeLeftRight joins a left and right segment on one row, truncating the

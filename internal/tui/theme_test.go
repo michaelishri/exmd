@@ -20,13 +20,13 @@ func TestSetThemeRebuildsStyles(t *testing.T) {
 	defer SetTheme(theme.Dark)
 
 	SetTheme(theme.Dark)
-	if s := pathStyle.Render("x"); s == "x" {
+	if s := infoStyle.Render("x"); s == "x" {
 		t.Fatal("dark theme rendered no color despite a color profile")
 	}
 
 	SetTheme(theme.Notty)
-	if s := pathStyle.Render("x"); s != "x" {
-		t.Fatalf("notty pathStyle = %q, want plain text", s)
+	if s := infoStyle.Render("x"); s != "x" {
+		t.Fatalf("notty infoStyle = %q, want plain text", s)
 	}
 
 	m := newViewer(t, 120, 40)
