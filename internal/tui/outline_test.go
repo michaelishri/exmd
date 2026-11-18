@@ -39,9 +39,13 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 			t.Fatalf("row %d has no base padding: %q", r, lines[r])
 		}
 	}
-	// One blank shaded row at the bottom (after the last entry).
+	// One blank shaded row at the bottom (right under the last entry);
+	// beyond it the column is unpainted — no filler "chin".
 	if strings.TrimSpace(lines[n+1]) != "" {
 		t.Fatalf("bottom pad row not blank: %q", lines[n+1])
+	}
+	if lines[n+2] != "" {
+		t.Fatalf("filler below the strip should be unpainted: %q", lines[n+2])
 	}
 
 	// No title row: the first entry (an h1, selected by the scroll-spy)

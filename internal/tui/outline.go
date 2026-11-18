@@ -112,16 +112,20 @@ func (o *outlineModel) last() bool {
 // and below the entries.
 const panePad = 1
 
-// view renders the sidebar as `height` shaded rows of entries — no title
-// row; the entries themselves are the surface, inset one row top and bottom.
+// view renders the sidebar entries as a shaded strip: one blank row above
+// and below the entries, and nothing painted below them — the column is
+// only as tall as its content, so no blank "chin" runs to the window edge.
+// When the entries fill the window (scrolling), the strip is full height.
 func (o *outlineModel) view(height int) string {
 	if !o.visible {
 		return ""
 	}
 	rows := make([]string, height)
-	// The whole column is painted; the top and bottom rows stay blank.
-	for r := range rows {
-		rows[r] = rowStyle.Width(o.width).Render("")
+	blank := rowStyle.Width(o.width).Render("")
+	setRow := func(r int, s string) {
+		if r >= 0 && r < height {
+			rows[r] = s
+		}
 	}
 
 	const topPad = 1
@@ -141,49 +145,49 @@ func (o *outlineModel) view(height int) string {
 		}
 	}
 
+	setRow(0, blank) // top pad
+	drawn := 0
 	if len(o.entries) == 0 {
 		empty := "no headings"
 		if o.tab == tabBlocks {
 			empty = "no blocks"
 		}
-		if top < height {
-			rows[top] = emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
-		}
-		return strings.Join(rows, "\n")
-	}
-
-	pad := strings.Repeat(" ", panePad)
-	for r := 0; r < visible; r++ {
-		row := top + r
-		if row >= height-topPad {
-			break
-		}
-		idx := start + r
-		if idx >= len(o.entries) {
-			break
-		}
-		e := o.entries[idx]
-		indent := ""
-		if o.tab == tabHeadings {
-			n := e.level - 1
-			if n > 3 {
-				n = 3
+		setRow(top, emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad)+empty))
+		drawn = 1
+	} else {
+		pad := strings.Repeat(" ", panePad)
+		for r := 0; r < visible; r++ {
+			idx := start + r
+			if idx >= len(o.entries) {
+				break
 			}
-			if n < 0 {
-				n = 0
+			e := o.entries[idx]
+			indent := ""
+			if o.tab == tabHeadings {
+				n := e.level - 1
+				if n > 3 {
+					n = 3
+				}
+				if n < 0 {
+					n = 0
+				}
+				indent = strings.Repeat("  ", n)
 			}
-			indent = strings.Repeat("  ", n)
-		}
-		label := indent + e.label
-		if idx == o.sel {
-			// The marker occupies two cells after the base pad, so the
-			// text budget is two columns tighter to keep the right edge.
-			text := ansi.Truncate(label, o.width-panePad-3, "…")
-			rows[row] = selRowStyle.Width(o.width).Render(pad + markerStyle.Render("▸") + " " + text)
-		} else {
-			text := ansi.Truncate(label, o.width-panePad-1, "…")
-			rows[row] = rowStyle.Width(o.width).Render(pad + text)
+			label := indent + e.label
+			if idx == o.sel {
+				// The marker occupies two cells after the base pad, so the
+				// text budget is two columns tighter to keep the right edge.
+				text := ansi.Truncate(label, o.width-panePad-3, "…")
+				setRow(top+r, selRowStyle.Width(o.width).Render(pad+markerStyle.Render("▸")+" "+text))
+			} else {
+				text := ansi.Truncate(label, o.width-panePad-1, "…")
+				setRow(top+r, rowStyle.Width(o.width).Render(pad+text))
+			}
+			drawn = r + 1
 		}
 	}
+	// Bottom pad directly under the entries; below it the column stays
+	// unpainted.
+	setRow(top+drawn, blank)
 	return strings.Join(rows, "\n")
 }
