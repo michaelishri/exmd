@@ -26,6 +26,7 @@ type entry struct {
 // scroll position.
 type outlineModel struct {
 	tab     int
+	title   string // the document's first h1
 	sel     int
 	visible bool
 	width   int
@@ -36,9 +37,22 @@ func newOutline() outlineModel {
 	return outlineModel{tab: tabHeadings}
 }
 
+// firstH1 returns the text of the document's first level-1 heading. It is
+// typically the first body line, but not necessarily — the scan makes no
+// position assumption. Documents without an h1 fall back to the title.
+func firstH1(d *doc.Document) string {
+	for _, h := range d.Headings {
+		if h.Level == 1 {
+			return h.Text
+		}
+	}
+	return d.HeadingText()
+}
+
 // rebuild recomputes entries from the current render and tab.
 func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	o.width = width
+	o.title = firstH1(d)
 	o.entries = o.entries[:0]
 	switch o.tab {
 	case tabHeadings:
@@ -112,23 +126,27 @@ func (o *outlineModel) last() bool {
 // top and bottom of the column.
 const panePad = 1
 
-// view renders the sidebar as a full-height shaded column of entries — no
-// title row; the entries are inset one blank row at the top and bottom of
-// the column, and the viewer's outer margins (one row top/bottom, one
-// column right) sit outside the strip.
+// view renders the sidebar as a full-height shaded column: the document's
+// first h1 as the title row, then the entries inset one blank row at the
+// top and bottom of the column. The viewer's outer margins (one row
+// top/bottom, one column right) sit outside the strip.
 func (o *outlineModel) view(height int) string {
 	if !o.visible {
 		return ""
 	}
 	rows := make([]string, height)
-	// The whole column is painted; the top and bottom rows stay blank.
+	// The whole column is painted; the bottom row stays blank.
 	for r := range rows {
 		rows[r] = rowStyle.Width(o.width).Render("")
 	}
 
-	const topPad = 1
-	top := topPad
-	visible := height - 2*topPad
+	// Title row: the document's first h1.
+	rows[0] = tabTitleStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + o.title)
+
+	const titleRows = 1
+	top := titleRows + 1 // title + blank pad
+	bottomPad := 1
+	visible := height - top - bottomPad
 	if visible < 1 {
 		visible = 1
 	}
@@ -157,7 +175,7 @@ func (o *outlineModel) view(height int) string {
 	pad := strings.Repeat(" ", panePad)
 	for r := 0; r < visible; r++ {
 		row := top + r
-		if row >= height-topPad {
+		if row >= height-bottomPad {
 			break
 		}
 		idx := start + r
