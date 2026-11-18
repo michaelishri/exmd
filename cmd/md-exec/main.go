@@ -10,6 +10,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/muesli/termenv"
 )
 
 const version = "0.1.0-dev"
@@ -17,16 +19,20 @@ const version = "0.1.0-dev"
 const usage = `md-exec — executable Markdown (runbooks)
 
 Usage:
-  md-exec DOC [--set K=V]           open a runbook in the TUI (r runs, n steps, s stops)
+  md-exec DOC [--set K=V] [--theme auto|dark|notty]
+                                    open a runbook in the TUI (r runs, n steps, s stops)
   md-exec check DOC                 validate; report all diagnostics at once
   md-exec list DOC                  enumerate executable blocks
   md-exec globals DOC [--set K=V]   show the document's global variables
-  md-exec print DOC                 render the document to the terminal
+  md-exec print DOC [--width N] [--theme auto|dark|notty]
+                                    render the document to the terminal
   md-exec version                   print the version
 
 Launch-time overrides (--set KEY=VALUE) may target any global declared in the
 frontmatter; the frontmatter is the complete contract of the document's
-variable surface (SPEC.md §2.2).
+variable surface (SPEC.md §2.2). --theme selects the palette for the TUI and
+print: auto (the default) is dark when the terminal supports color and notty
+otherwise; dark and notty force their palette.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
@@ -40,6 +46,40 @@ var (
 
 func main() {
 	os.Exit(run(os.Args[1:]))
+}
+
+// colorSupported reports whether the terminal can display color.
+func colorSupported() bool {
+	return lipgloss.ColorProfile() != termenv.Ascii
+}
+
+// parseTheme extracts --theme NAME (or --theme=NAME, single or double dash)
+// from args in any position and returns the remaining args. A repeated flag
+// wins. The empty result means "auto".
+func parseTheme(args []string) (name string, rest []string, err error) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--theme" || a == "-theme":
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("--theme requires a value (auto, dark, notty)")
+			}
+			i++
+			name = args[i]
+		case strings.HasPrefix(a, "--theme="):
+			name = strings.TrimPrefix(a, "--theme=")
+		case strings.HasPrefix(a, "-theme="):
+			name = strings.TrimPrefix(a, "-theme=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return name, rest, nil
+}
+
+// resolveTheme turns a parsed --theme value into a Theme for the terminal.
+func resolveTheme(name string) (theme.Theme, error) {
+	return theme.Resolve(name, colorSupported())
 }
 
 func run(args []string) int {

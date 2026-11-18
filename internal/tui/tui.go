@@ -18,6 +18,7 @@ import (
 
 	"github.com/michaelishri/md-exec/internal/doc"
 	"github.com/michaelishri/md-exec/internal/render"
+	"github.com/michaelishri/md-exec/internal/theme"
 )
 
 const (
@@ -60,6 +61,7 @@ type Model struct {
 	mode      mode
 	run       runState
 	overrides map[string]string
+	theme     theme.Theme
 }
 
 // New builds the model for a loaded document; overrides are launch-time
@@ -75,6 +77,7 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		focus:     focusContent,
 		mode:      modeView,
 		overrides: overrides,
+		theme:     t,
 		run:       runState{globals: map[string]string{}},
 	}
 	m.content.MouseWheelEnabled = true
@@ -337,7 +340,7 @@ func (m *Model) relayout() {
 		return
 	}
 
-	out, err := render.Render(m.doc, contentW, colorEnabled())
+	out, err := render.Render(m.doc, contentW, m.colorEnabled())
 	if err != nil {
 		m.renderErr = err.Error()
 	} else {
@@ -539,6 +542,8 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-func colorEnabled() bool {
-	return lipgloss.ColorProfile() != termenv.Ascii
+// colorEnabled reports whether content may carry ANSI color: the terminal
+// must support color and the active theme must not be notty.
+func (m Model) colorEnabled() bool {
+	return lipgloss.ColorProfile() != termenv.Ascii && m.theme.Name != theme.Notty.Name
 }

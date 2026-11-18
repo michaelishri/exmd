@@ -78,6 +78,8 @@ optimizes for human use.
       live globals inspector; `n` steps one block at a time; `s` stops
       (the engine terminates the current process group, SPEC §4.7);
       `md-exec DOC --set K=V` overrides
+- [x] `--theme auto|dark|notty` selects the palette for the TUI and `print`
+      (auto: dark when the terminal supports color, notty otherwise)
 
 ## Docs
 

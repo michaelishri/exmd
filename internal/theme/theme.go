@@ -3,6 +3,11 @@
 // shades, muted chrome, and color reserved for state.
 package theme
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Color is a theme color token.
 type Color string
 
@@ -52,4 +57,24 @@ var Dark = Theme{
 // empty, so styles render as plain text.
 var Notty = Theme{
 	Name: "notty",
+}
+
+// Resolve maps a --theme flag value to a Theme. "auto" (the default, and the
+// empty string) picks Dark when the terminal supports color and Notty
+// otherwise; "dark" and "notty" force their tokens regardless. Matching is
+// case-insensitive.
+func Resolve(name string, colorSupported bool) (Theme, error) {
+	switch strings.ToLower(name) {
+	case "", "auto":
+		if colorSupported {
+			return Dark, nil
+		}
+		return Notty, nil
+	case "dark":
+		return Dark, nil
+	case "notty":
+		return Notty, nil
+	default:
+		return Theme{}, fmt.Errorf("unknown theme %q (valid: auto, dark, notty)", name)
+	}
 }

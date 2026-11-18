@@ -6,16 +6,21 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"golang.org/x/term"
 
 	"github.com/michaelishri/md-exec/internal/render"
+	"github.com/michaelishri/md-exec/internal/theme"
 )
 
 // cmdPrint renders the document to the terminal — a reader's view of the
-// runbook (SPEC.md §4.8 observation, on a stream).
+// runbook (SPEC.md §4.8 observation, on a stream). --theme selects the
+// palette.
 func cmdPrint(args []string) int {
+	themeName, args, err := parseTheme(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "md-exec print: %v\n", err)
+		return 2
+	}
 	width := 0
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -41,14 +46,20 @@ func cmdPrint(args []string) int {
 			}
 			width = n
 		case a == "-h" || a == "--help":
-			fmt.Println("usage: md-exec print DOC [--width N]")
+			fmt.Println("usage: md-exec print DOC [--width N] [--theme auto|dark|notty]")
 			return 0
 		default:
 			positional = append(positional, a)
 		}
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec print DOC [--width N]")
+		fmt.Fprintln(os.Stderr, "usage: md-exec print DOC [--width N] [--theme auto|dark|notty]")
+		return 2
+	}
+
+	th, err := resolveTheme(themeName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "md-exec print: %v\n", err)
 		return 2
 	}
 
@@ -73,7 +84,8 @@ func cmdPrint(args []string) int {
 			width = 80
 		}
 	}
-	color := tty && lipgloss.ColorProfile() != termenv.Ascii
+	// Forcing the notty theme suppresses color even on a capable terminal.
+	color := tty && colorSupported() && th.Name != theme.Notty.Name
 
 	out, err := render.Render(res.Doc, width, color)
 	if err != nil {

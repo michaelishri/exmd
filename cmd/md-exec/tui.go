@@ -13,17 +13,30 @@ import (
 
 // cmdTUI opens a document in the viewer. Execution lives here; headless
 // verbs never run blocks (SPEC.md §6: the interface is the tool's choice).
-// Launch-time overrides arrive as --set KEY=VALUE in any position.
+// Launch-time overrides arrive as --set KEY=VALUE in any position; --theme
+// selects the palette.
 func cmdTUI(args []string) int {
+	themeName, args, err := parseTheme(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		return 2
+	}
 	sets, positional, err := parseSetArgs(args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]...")
+		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
 		return 2
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]...")
+		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
 		return 2
 	}
+
+	th, err := resolveTheme(themeName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		return 2
+	}
+	tui.SetTheme(th)
 
 	res, err := doc.Load(positional[0])
 	if err != nil {
