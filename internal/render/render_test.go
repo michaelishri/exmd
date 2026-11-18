@@ -88,3 +88,20 @@ func TestRenderDeterministic(t *testing.T) {
 		t.Fatal("render is not deterministic")
 	}
 }
+
+func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
+	// Executable blocks lift one background shade so they read as
+	// interactive surfaces next to display-only fences; inline code in
+	// prose keeps the panel shade in both styles.
+	dark, exec := darkStyle(), execDarkStyle()
+	if dark.CodeBlock.StylePrimitive.BackgroundColor == nil ||
+		exec.CodeBlock.StylePrimitive.BackgroundColor == nil {
+		t.Fatal("code-block backgrounds unset")
+	}
+	if *dark.CodeBlock.StylePrimitive.BackgroundColor == *exec.CodeBlock.StylePrimitive.BackgroundColor {
+		t.Fatal("exec and display fences share a background")
+	}
+	if *dark.Code.StylePrimitive.BackgroundColor != *exec.Code.StylePrimitive.BackgroundColor {
+		t.Fatal("inline code shade should not change between styles")
+	}
+}

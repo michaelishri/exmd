@@ -485,7 +485,7 @@ func (m Model) bodyView() string {
 }
 
 func (m Model) outlineView() string {
-	return m.outline.view(m.content.Height)
+	return m.outline.view(m.content.Height, m.focus == focusOutline)
 }
 
 func (m Model) sepView() string {

@@ -59,9 +59,10 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 	bounds := boundaries(d)
 	srcLines := strings.Split(string(d.Source), "\n")
 
-	var style ansi.StyleConfig
+	var style, execStyle ansi.StyleConfig
 	if color {
 		style = darkStyle()
+		execStyle = execDarkStyle()
 	} else {
 		style = styles.ASCIIStyleConfig
 	}
@@ -101,7 +102,7 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			// Strip the :exec suffix so chroma picks the right lexer; this
 			// only affects rendering, never execution (SPEC.md §9).
 			chunk = stripExecSuffix(chunk)
-			out.appendGlamour(chunk, width, style)
+			out.appendGlamour(chunk, width, execStyle)
 		default:
 			out.appendGlamour(chunk, width, style)
 		}
