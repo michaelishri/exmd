@@ -316,19 +316,24 @@ func (m *Model) relayout() {
 	}
 
 	m.outline.visible = w >= minSidebarWidth
-	sidebarW := 0
+	// sidebarTotal is the sidebar's full block width (ring + painted
+	// column); m.sidebarWidth is the painted column itself — the sidebar
+	// ring hugs it, with no inset.
+	sidebarTotal := 0
 	if m.outline.visible {
-		sidebarW = clamp(w/4, 24, 40)
+		sidebarTotal = clamp(w/4, 24, 40)
 	}
-	m.sidebarWidth = sidebarW
-	contentW := w
+	m.sidebarWidth = max(0, sidebarTotal-2*ringSize)
+	// Content reserves its ring cells plus the inset gap on every side.
+	contentW := w - 2*ringSize - 2*paneInset
 	if m.outline.visible {
-		contentW = w - sidebarW - gutterWidth
+		contentW -= sidebarTotal + gutterWidth
 	}
 	contentW = max(10, contentW)
 
 	helpLines := lipgloss.Height(m.statusView())
 	bodyH := h - 3 - (helpLines - 1)
+	bodyH -= 2*ringSize + 2*paneInset
 	bodyH = max(1, bodyH)
 
 	m.content.Width = contentW
@@ -350,7 +355,7 @@ func (m *Model) relayout() {
 
 	if m.out != nil {
 		m.content.SetContent(strings.Join(m.out.Lines, "\n"))
-		m.outline.rebuild(m.doc, m.out, sidebarW)
+		m.outline.rebuild(m.doc, m.out, m.sidebarWidth)
 	}
 
 	if m.laidOut && len(m.outline.entries) > 0 {
@@ -448,44 +453,90 @@ func (m Model) headerView() string {
 
 func (m Model) bodyView() string {
 	if m.mode == modeRun {
-		content := m.content.View()
+		contentBlock := ringPane(m.content.View(), m.focus == focusContent, m.content.Width, paneInset)
 		if !m.outline.visible {
-			return content
+			return contentBlock
 		}
-		gutter := make([]string, m.content.Height)
+		gutter := make([]string, m.content.Height+2*ringSize+2*paneInset)
 		for i := range gutter {
 			gutter[i] = strings.Repeat(" ", gutterWidth)
 		}
 		return lipgloss.JoinHorizontal(lipgloss.Top,
-			content,
+			contentBlock,
 			strings.Join(gutter, "\n"),
-			m.globalsView(m.content.Height),
+			ringPane(m.globalsView(m.content.Height+2*paneInset), false, m.sidebarWidth, 0),
 		)
 	}
 
+	contentInner := m.content.View()
 	if m.renderErr != "" {
-		return errStyle.Render("render error: " + m.renderErr)
+		contentInner = errStyle.Render("render error: " + m.renderErr)
+	} else if m.out == nil {
+		contentInner = ""
 	}
-	if m.out == nil {
-		return ""
-	}
-	content := m.content.View()
+	contentBlock := ringPane(contentInner, m.focus == focusContent, m.content.Width, paneInset)
 	if !m.outline.visible {
-		return content
+		return contentBlock
 	}
-	gutter := make([]string, m.content.Height)
+	gutter := make([]string, m.content.Height+2*ringSize+2*paneInset)
 	for i := range gutter {
 		gutter[i] = strings.Repeat(" ", gutterWidth)
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
-		content,
+		contentBlock,
 		strings.Join(gutter, "\n"),
-		m.outlineView(),
+		ringPane(m.outlineView(), m.focus == focusOutline, m.sidebarWidth, 0),
 	)
 }
 
+// ringSize is the number of cells the focus ring occupies on every side of
+// a pane, and paneInset the blank gap between the ring and the pane
+// content. Both are always reserved, ringed or not, so toggling focus
+// never shifts the layout.
+const (
+	ringSize  = 1
+	paneInset = 1
+)
+
+// ringPane wraps a pane in its reserved ring cells. When on, the ring is
+// drawn in the primary (state) color; otherwise the cells stay blank. The
+// inset blank cells sit between the ring and the content.
+func ringPane(inner string, on bool, w, inset int) string {
+	spanW := w + 2*inset
+	top := strings.Repeat(" ", spanW+2*ringSize)
+	bottom := top
+	left, right := " ", " "
+	if on {
+		top = ringStyle.Render("┌" + strings.Repeat("─", spanW) + "┐")
+		bottom = ringStyle.Render("└" + strings.Repeat("─", spanW) + "┘")
+		left, right = ringStyle.Render("│"), ringStyle.Render("│")
+	}
+	lines := strings.Split(inner, "\n")
+	gap := strings.Repeat(" ", spanW)
+	out := make([]string, 0, len(lines)+2+2*inset)
+	out = append(out, top)
+	for i := 0; i < inset; i++ {
+		out = append(out, left+gap+right)
+	}
+	for _, l := range lines {
+		if n := ansi.StringWidth(l); n < w {
+			l += strings.Repeat(" ", w-n)
+		} else if n > w {
+			l = ansi.Truncate(l, w, "…")
+		}
+		out = append(out, left+strings.Repeat(" ", inset)+l+strings.Repeat(" ", inset)+right)
+	}
+	for i := 0; i < inset; i++ {
+		out = append(out, left+gap+right)
+	}
+	out = append(out, bottom)
+	return strings.Join(out, "\n")
+}
+
 func (m Model) outlineView() string {
-	return m.outline.view(m.content.Height, m.focus == focusOutline)
+	// The sidebar ring has no inset, so its column needs two extra rows to
+	// match the inset content block's height.
+	return m.outline.view(m.content.Height + 2*paneInset)
 }
 
 func (m Model) sepView() string {

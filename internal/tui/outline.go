@@ -107,77 +107,55 @@ func (o *outlineModel) last() bool {
 	return true
 }
 
-// Sidebar geometry: left padding inside rows and a blank shaded row between
-// entries, so the column breathes instead of packing rows edge to edge.
-const (
-	panePad  = 2
-	entryGap = 1
-)
+// Sidebar geometry: left padding inside rows so the column breathes
+// without packing text edge to edge.
+const panePad = 2
 
-// view renders the sidebar as `height` shaded rows. focused selects the
-// one-shade-up treatment for the whole column, so tabbing between the
-// content and the sidebar is visible at a glance.
-func (o *outlineModel) view(height int, focused bool) string {
+// view renders the sidebar as `height` shaded rows.
+func (o *outlineModel) view(height int) string {
 	if !o.visible {
 		return ""
 	}
-	rowBg, selBg, titleBg, emptyBg := rowStyle, selRowStyle, tabTitleStyle, emptyStateStyle
-	if focused {
-		rowBg, selBg, titleBg, emptyBg = rowFocusStyle, selRowFocusStyle, tabTitleFocusStyle, emptyStateFocusStyle
-	}
-
 	rows := make([]string, height)
 	title := "Outline"
 	if o.tab == tabBlocks {
 		title = "Blocks"
 	}
-	rows[0] = titleBg.Width(o.width).Render(strings.Repeat(" ", panePad) + title)
+	rows[0] = tabTitleStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + title)
 
-	// The body starts below the title and its spacer row; every entry is
-	// followed by a blank shaded row.
-	bodyTop := 2
-	visible := height - bodyTop
+	visible := height - 1
 	if visible < 1 {
 		visible = 1
 	}
-	slots := (visible + entryGap) / (entryGap + 1)
-	if slots < 1 {
-		slots = 1
-	}
 	start := 0
-	if len(o.entries) > slots {
-		start = o.sel - (slots-1)/2
+	if len(o.entries) > visible {
+		start = o.sel - visible/2
 		if start < 0 {
 			start = 0
 		}
-		if start+slots > len(o.entries) {
-			start = len(o.entries) - slots
+		if start+visible > len(o.entries) {
+			start = len(o.entries) - visible
 		}
 	}
 
-	// The whole column is painted; entries overwrite their slot lines.
-	for r := bodyTop; r < height; r++ {
-		rows[r] = rowBg.Width(o.width).Render("")
-	}
 	if len(o.entries) == 0 {
 		empty := "no headings"
 		if o.tab == tabBlocks {
 			empty = "no blocks"
 		}
-		rows[bodyTop] = emptyBg.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
-		return strings.Join(rows, "\n")
+		rows[1] = emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
 	}
 
 	pad := strings.Repeat(" ", panePad)
 	textBudget := o.width - 2*panePad - 2
-	for si := 0; si < slots; si++ {
-		r := bodyTop + si*(entryGap+1)
-		if r >= height {
-			break
+	for r := 1; r < height; r++ {
+		if rows[r] != "" {
+			continue
 		}
-		idx := start + si
+		idx := start + r - 1
 		if idx >= len(o.entries) {
-			break
+			rows[r] = rowStyle.Width(o.width).Render("")
+			continue
 		}
 		e := o.entries[idx]
 		indent := ""
@@ -193,9 +171,9 @@ func (o *outlineModel) view(height int, focused bool) string {
 		}
 		text := ansi.Truncate(indent+e.label, textBudget, "…")
 		if idx == o.sel {
-			rows[r] = selBg.Width(o.width).Render(pad + markerStyle.Render("▸") + " " + text)
+			rows[r] = selRowStyle.Width(o.width).Render(pad + markerStyle.Render("▸") + " " + text)
 		} else {
-			rows[r] = rowBg.Width(o.width).Render(pad + text)
+			rows[r] = rowStyle.Width(o.width).Render(pad + text)
 		}
 	}
 	return strings.Join(rows, "\n")

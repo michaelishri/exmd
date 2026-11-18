@@ -31,12 +31,9 @@ var (
 	successStyle    lipgloss.Style
 	warnStyle       lipgloss.Style
 
-	// Focus treatment: when the outline pane holds focus, its whole column
-	// lifts one background shade so the focused pane is visible at a glance.
-	rowFocusStyle        lipgloss.Style
-	selRowFocusStyle     lipgloss.Style
-	tabTitleFocusStyle   lipgloss.Style
-	emptyStateFocusStyle lipgloss.Style
+	// ringStyle draws the focus ring around the focused pane. Focus is
+	// state, and primary is the state color.
+	ringStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -102,24 +99,8 @@ func buildStyles() {
 	warnStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Warning))
 
-	// Focus treatment: the outline column lifts to the element shade.
-	rowFocusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted)).
-		Background(lipgloss.Color(t.BackgroundElement))
-
-	selRowFocusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Text)).
-		Background(lipgloss.Color(t.BackgroundElement)).
-		Bold(true)
-
-	tabTitleFocusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary)).
-		Background(lipgloss.Color(t.BackgroundElement)).
-		Bold(true)
-
-	emptyStateFocusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted)).
-		Background(lipgloss.Color(t.BackgroundElement))
+	ringStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Primary))
 }
 
 // tuneHelp mutes the help model's palette so the status bar whispers.

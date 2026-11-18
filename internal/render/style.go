@@ -117,11 +117,11 @@ func darkStyle() gansi.StyleConfig {
 	return c
 }
 
-// execPanel shades executable blocks one step brighter than display-only
-// fences, so the two are distinguishable at a glance: fences that run read
-// as interactive surfaces, fences that merely display stay at the panel
-// shade. The value sits between the panel and element tokens.
-const execPanel = "#1f1f26"
+// execPanel shades executable blocks with a violet-tinted background
+// derived from the primary token, so fences that run read as interactive
+// surfaces next to neutral display-only fences. The tint is deliberately
+// strong enough to survive modest terminal palettes.
+const execPanel = "#2b2b41"
 
 // execDarkStyle is darkStyle with the fenced-block background lifted to the
 // executable shade; inline code in prose keeps the panel shade.
