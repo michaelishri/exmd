@@ -1,9 +1,10 @@
 // Package tui implements the md-exec viewer and run mode: the rendered
 // runbook on the left, the document outline as a shaded 50-column sidebar
 // on the right. The visual language follows the OpenCode TUI — borderless,
-// separated by background shades, color reserved for state. The viewer is a
-// full-bleed reading surface with no header or footer; run mode keeps a
-// status bar because it carries the run state.
+// separated by background shades, color reserved for state. The viewer
+// floats the panes with one blank row above and below and a one-column
+// margin right of the sidebar; run mode keeps a status bar because it
+// carries the run state.
 package tui
 
 import (
@@ -312,16 +313,15 @@ func (m *Model) relayout() {
 	m.sidebarWidth = sidebarW
 	contentW := w
 	if m.outline.visible {
-		contentW = w - sidebarW - gutterWidth
+		// Even outer padding around the sidebar: 2-col gutter on the left,
+		// 1-col margin on the right.
+		contentW = w - sidebarW - gutterWidth - 1
 	}
 	contentW = max(10, contentW)
 
-	// The viewer is a full-bleed reading surface; run mode keeps the
-	// hairline and status bar so run state stays visible.
-	chrome := 0
-	if m.mode == modeRun {
-		chrome = 2
-	}
+	// Viewer: one blank row above and below the panes. Run mode: the
+	// hairline + status bar.
+	chrome := 2
 	bodyH := max(1, h-chrome)
 
 	m.content.Width = contentW
@@ -419,15 +419,20 @@ func (m Model) View() string {
 		return m.content.View()
 	}
 	var sb strings.Builder
-	sb.WriteString(m.bodyView())
 	if m.mode == modeRun {
 		// Run mode keeps the hairline and status bar: they carry the run
 		// state (running, stopped, failed, done).
+		sb.WriteString(m.bodyView())
 		sb.WriteByte('\n')
 		sb.WriteString(m.sepView())
 		sb.WriteByte('\n')
 		sb.WriteString(m.runStatus())
+		return sb.String()
 	}
+	// The viewer floats the panes with one blank row above and below.
+	sb.WriteByte('\n')
+	sb.WriteString(m.bodyView())
+	sb.WriteByte('\n')
 	return sb.String()
 }
 
@@ -462,10 +467,15 @@ func (m Model) bodyView() string {
 	for i := range gutter {
 		gutter[i] = strings.Repeat(" ", gutterWidth)
 	}
+	margin := make([]string, m.content.Height)
+	for i := range margin {
+		margin[i] = " "
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		content,
 		strings.Join(gutter, "\n"),
 		m.outlineView(),
+		strings.Join(margin, "\n"),
 	)
 }
 

@@ -42,7 +42,7 @@ func TestViewerLayout(t *testing.T) {
 	if m.outline.width != 50 {
 		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-50-gutterWidth {
+	if m.content.Width != 120-50-gutterWidth-1 {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()
@@ -61,9 +61,14 @@ func TestViewerLayout(t *testing.T) {
 	if !strings.Contains(v, "md-exec feature tour") {
 		t.Fatal("document content missing")
 	}
-	// The viewer viewport spans the full window height.
-	if m.content.Height != 40 {
-		t.Fatalf("viewer viewport height = %d, want 40", m.content.Height)
+	// The panes float: one blank row above and below the body.
+	lines := strings.Split(v, "\n")
+	if strings.TrimSpace(lines[0]) != "" || strings.TrimSpace(lines[len(lines)-1]) != "" {
+		t.Fatalf("missing blank margin rows: first=%q last=%q", lines[0], lines[len(lines)-1])
+	}
+	// Viewer viewport: window height minus the two margin rows.
+	if m.content.Height != 38 {
+		t.Fatalf("viewer viewport height = %d, want 38", m.content.Height)
 	}
 }
 
