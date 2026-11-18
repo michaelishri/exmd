@@ -6,10 +6,10 @@ import (
 )
 
 // TestOutlinePaddingAndSpacing checks the sidebar geometry: the strip is
-// full height, entries start at its first row with one column of base left
-// padding, rows are packed (no blank lines between entries), blank shaded
-// rows fill below the entries, and the outer margin rows sit outside the
-// strip.
+// full height, its first and last rows are blank internal pads, the entries
+// sit between them with one column of base left padding, rows are packed
+// (no blank lines between entries), and the outer margin rows sit outside
+// the strip.
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
@@ -19,16 +19,24 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
 	}
 
-	// The strip starts at its first row: the first entry (an h1, selected
-	// by the scroll-spy) sits directly at the top, one column in.
+	// Internal pad rows: the first row of the strip is painted blank.
+	if lines[0] == "" || strings.TrimSpace(lines[0]) != "" {
+		t.Fatalf("top internal pad row missing: %q", lines[0])
+	}
+
+	// The entries sit between the pads: the first entry (an h1, selected
+	// by the scroll-spy) one row down, one column in.
 	n := len(m.outline.entries)
 	if n < 2 {
 		t.Fatalf("demo should have several headings, got %d", n)
 	}
-	if !strings.HasPrefix(lines[0], " ▸ md-exec feature tour") {
-		t.Fatalf("first entry wrong: %q", lines[0])
+	if n > rows-2 {
+		t.Fatalf("demo headings exceed the sidebar: %d", n)
 	}
-	for r := 1; r < n; r++ {
+	if !strings.HasPrefix(lines[1], " ▸ md-exec feature tour") {
+		t.Fatalf("first entry wrong: %q", lines[1])
+	}
+	for r := 2; r <= n; r++ {
 		if strings.TrimSpace(lines[r]) == "" {
 			t.Fatalf("row %d is blank: blank lines were removed", r)
 		}
