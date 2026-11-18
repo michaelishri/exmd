@@ -350,6 +350,10 @@ An adapter for language `L` MUST:
    harvesting.
 5. Confine its own machinery to an internal namespace (e.g. `__mdexec_`-prefixed
    names, internal environment keys) that cannot collide with user code.
+6. Suppress interpreter-managed names — those the interpreter itself maintains in
+   the process environment, such as `_`, `PWD`, `OLDPWD`, and `SHLVL` for bash —
+   from the reported delta. They are infrastructure, not document state, and are
+   neither harvested nor warned about (§4.4).
 
 ### 5.2 v1 adapters
 

@@ -56,6 +56,16 @@ var (
 
 	errStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(t.Error))
+
+	accentStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(t.Primary)).
+			Bold(true)
+
+	successStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(t.Success))
+
+	warnStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(t.Warning))
 )
 
 // tuneHelp mutes the help model's palette so the status bar whispers.

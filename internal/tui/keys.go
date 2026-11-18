@@ -8,6 +8,8 @@ type keyMap struct {
 	Jump   key.Binding
 	Focus  key.Binding
 	Tab    key.Binding
+	Run    key.Binding
+	Back   key.Binding
 	Help   key.Binding
 	Quit   key.Binding
 }
@@ -30,6 +32,14 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("t"),
 			key.WithHelp("t", "outline/blocks"),
 		),
+		Run: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "run"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("v", "esc"),
+			key.WithHelp("v", "back"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -42,7 +52,7 @@ func defaultKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Scroll, k.Focus, k.Tab, k.Help, k.Quit}
+	return []key.Binding{k.Scroll, k.Focus, k.Tab, k.Run, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
@@ -54,9 +64,13 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		key.WithKeys("pgup", "pgdown", "ctrl+u", "ctrl+d"),
 		key.WithHelp("pgup/pgdn", "page"),
 	)
+	back := key.NewBinding(
+		key.WithKeys("v", "esc"),
+		key.WithHelp("v/esc", "back to viewer"),
+	)
 	return [][]key.Binding{
 		{k.Scroll, pages, topBottom},
 		{k.Focus, k.Tab, k.Jump},
-		{k.Help, k.Quit},
+		{k.Run, back, k.Help, k.Quit},
 	}
 }

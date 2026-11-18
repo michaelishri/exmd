@@ -115,11 +115,11 @@ func (e *engine) warn(res *RunResult, format string, args ...interface{}) {
 func (e *engine) run() *RunResult {
 	res := &RunResult{}
 	defer func() {
-		res.Globals = make(map[string]string, len(e.globals))
-		for name, val := range e.globals {
-			res.Globals[name] = val
-		}
+		res.Globals = e.GlobalsSnapshot()
 	}()
+
+	// Initial state: defaults plus overrides, before the first block.
+	e.emit(Event{Kind: EventGlobals, Globals: e.GlobalsSnapshot()})
 
 	for _, b := range e.d.Blocks {
 		res.BlocksRun++
@@ -193,7 +193,16 @@ func (e *engine) runBlock(b *doc.Block, res *RunResult) int {
 	}
 
 	e.harvest(b, childEnv, envOut, res)
+	e.emit(Event{Kind: EventGlobals, Globals: e.GlobalsSnapshot()})
 	return status
+}
+
+// shellManaged names are maintained by the interpreter itself (bash sets
+// PWD/SHLVL/OLDPWD on startup and _ per external command). They appear in
+// every block's environment delta but are infrastructure, not document
+// state — adapters MUST suppress them (SPEC.md §5.1.6).
+var shellManaged = map[string]struct{}{
+	"_": {}, "OLDPWD": {}, "PWD": {}, "SHLVL": {},
 }
 
 // harvest applies the block's environment delta to the globals (§4.3): the
@@ -213,6 +222,9 @@ func (e *engine) harvest(b *doc.Block, envIn []string, envOut string, res *RunRe
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if _, managed := shellManaged[name]; managed {
+			continue // interpreter infrastructure, never document state (§5.1.6)
+		}
 		if _, declared := e.declared[name]; declared {
 			e.globals[name] = set[name]
 			continue
@@ -220,6 +232,9 @@ func (e *engine) harvest(b *doc.Block, envIn []string, envOut string, res *RunRe
 		e.warn(res, "exported undeclared variable %s (ignored)", name)
 	}
 	for _, name := range removed {
+		if _, managed := shellManaged[name]; managed {
+			continue
+		}
 		if _, declared := e.declared[name]; declared {
 			delete(e.globals, name)
 		}

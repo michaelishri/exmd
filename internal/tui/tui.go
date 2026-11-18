@@ -1,13 +1,12 @@
-// Package tui implements the md-exec viewer: the rendered runbook on the
-// left, the document outline as a shaded quarter-width column on the right,
-// and a single-line status bar. The visual language follows the OpenCode
-// TUI — borderless, separated by background shades, color reserved for
-// state.
+// Package tui implements the md-exec viewer and run mode: the rendered
+// runbook on the left, the document outline as a shaded quarter-width column
+// on the right, and a single-line status bar. The visual language follows
+// the OpenCode TUI — borderless, separated by background shades, color
+// reserved for state.
 package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -33,7 +32,14 @@ const (
 	focusOutline
 )
 
-// Model is the bubbletea model of the viewer.
+type mode int
+
+const (
+	modeView mode = iota
+	modeRun
+)
+
+// Model is the bubbletea model of the viewer and runner.
 type Model struct {
 	doc  *doc.Document
 	path string
@@ -41,26 +47,35 @@ type Model struct {
 	width, height int
 	laidOut       bool
 
-	out       *render.Output
-	content   viewport.Model
-	outline   outlineModel
-	focus     focusArea
-	help      help.Model
-	showHelp  bool
-	keys      keyMap
-	renderErr string
+	out          *render.Output
+	content      viewport.Model
+	outline      outlineModel
+	focus        focusArea
+	help         help.Model
+	showHelp     bool
+	keys         keyMap
+	renderErr    string
+	sidebarWidth int
+
+	mode      mode
+	run       runState
+	overrides map[string]string
 }
 
-// New builds the viewer for a loaded document.
-func New(res *doc.Result) Model {
+// New builds the model for a loaded document; overrides are launch-time
+// values for declared globals (SPEC.md §2.2).
+func New(res *doc.Result, overrides map[string]string) Model {
 	m := Model{
-		doc:     res.Doc,
-		path:    res.Doc.Path,
-		content: viewport.New(0, 0),
-		outline: newOutline(),
-		help:    help.New(),
-		keys:    defaultKeyMap(),
-		focus:   focusContent,
+		doc:       res.Doc,
+		path:      res.Doc.Path,
+		content:   viewport.New(0, 0),
+		outline:   newOutline(),
+		help:      help.New(),
+		keys:      defaultKeyMap(),
+		focus:     focusContent,
+		mode:      modeView,
+		overrides: overrides,
+		run:       runState{globals: map[string]string{}},
 	}
 	m.content.MouseWheelEnabled = true
 	tuneHelp(&m.help)
@@ -77,6 +92,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize(msg.Width, msg.Height)
 		return m, nil
 
+	case runEventMsg:
+		m.applyRunEvent(msg.ev)
+		if m.run.active {
+			return m, m.listenCmd()
+		}
+		return m, nil
+
+	case runDoneMsg:
+		m.finalizeRun(msg.result, nil)
+		return m, nil
+
+	case runErrMsg:
+		m.finalizeRun(nil, msg.err)
+		return m, nil
+
+	case runClosedMsg:
+		return m, nil // drained concurrently with runDoneMsg; no-op
+
 	case tea.KeyMsg:
 		if cmd, handled := m.handleKey(msg); handled {
 			return m, cmd
@@ -91,7 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.focus == focusContent {
+	if m.mode == modeView && m.focus == focusContent {
 		prev := m.content.YOffset
 		var cmd tea.Cmd
 		m.content, cmd = m.content.Update(msg)
@@ -115,7 +148,33 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.relayout()
 		return nil, true
 
+	case "r":
+		if m.mode != modeRun && !m.run.active && len(m.doc.Blocks) > 0 {
+			m.mode = modeRun
+			m.resetRun()
+			m.relayout()
+			return m.startRunCmd(), true
+		}
+		if m.mode == modeRun && !m.run.active {
+			// Re-run.
+			m.resetRun()
+			m.relayout()
+			return m.startRunCmd(), true
+		}
+		return nil, true
+
+	case "v", "esc":
+		if m.mode == modeRun && !m.run.active {
+			m.mode = modeView
+			m.relayout()
+			return nil, true
+		}
+		return nil, true
+
 	case "tab":
+		if m.mode == modeRun {
+			return nil, true // sidebar is not interactive in run mode
+		}
 		if m.focus == focusContent && m.outline.visible {
 			m.focus = focusOutline
 		} else {
@@ -124,11 +183,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "shift+tab":
+		if m.mode == modeRun {
+			return nil, true
+		}
 		m.focus = focusContent
 		return nil, true
 
 	case "t":
-		if m.out == nil {
+		if m.mode == modeRun || m.out == nil {
 			return nil, true
 		}
 		if m.outline.tab == tabHeadings {
@@ -138,6 +200,28 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		m.outline.rebuild(m.doc, m.out, m.outline.width)
 		m.jumpToSelected()
+		return nil, true
+	}
+
+	if m.mode == modeRun {
+		// While a run is active, only scrolling works.
+		if m.run.active {
+			switch msg.String() {
+			case "j", "down", "k", "up", "g", "G", "pgup", "pgdown", "ctrl+u", "ctrl+d":
+				prev := m.content.YOffset
+				m.content, _ = m.content.Update(msg)
+				_ = prev
+				return nil, true
+			}
+			return nil, true // consume everything else during a run
+		}
+		switch msg.String() {
+		case "j", "down", "k", "up", "g", "G", "pgup", "pgdown", "ctrl+u", "ctrl+d":
+			prev := m.content.YOffset
+			m.content, _ = m.content.Update(msg)
+			_ = prev
+			return nil, true
+		}
 		return nil, true
 	}
 
@@ -201,11 +285,25 @@ func (m *Model) relayout() {
 	if m.outline.visible {
 		sidebarW = clamp(w/4, 24, 40)
 	}
+	m.sidebarWidth = sidebarW
 	contentW := w
 	if m.outline.visible {
 		contentW = w - sidebarW - gutterWidth
 	}
 	contentW = max(10, contentW)
+
+	helpLines := lipgloss.Height(m.statusView())
+	bodyH := h - 3 - (helpLines - 1)
+	bodyH = max(1, bodyH)
+
+	m.content.Width = contentW
+	m.content.Height = bodyH
+
+	if m.mode == modeRun {
+		m.laidOut = true
+		m.setRunContent()
+		return
+	}
 
 	out, err := render.Render(m.doc, contentW, colorEnabled())
 	if err != nil {
@@ -215,12 +313,6 @@ func (m *Model) relayout() {
 		m.out = out
 	}
 
-	helpLines := lipgloss.Height(m.helpView())
-	bodyH := h - 3 - (helpLines - 1)
-	bodyH = max(1, bodyH)
-
-	m.content.Width = contentW
-	m.content.Height = bodyH
 	if m.out != nil {
 		m.content.SetContent(strings.Join(m.out.Lines, "\n"))
 		m.outline.rebuild(m.doc, m.out, sidebarW)
@@ -303,9 +395,9 @@ func (m Model) View() string {
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
 	sb.WriteByte('\n')
-	sb.WriteString(sepStyle.Render(strings.Repeat("─", max(1, m.width))))
+	sb.WriteString(m.sepView())
 	sb.WriteByte('\n')
-	sb.WriteString(m.helpView())
+	sb.WriteString(m.statusView())
 	return sb.String()
 }
 
@@ -320,6 +412,22 @@ func (m Model) headerView() string {
 }
 
 func (m Model) bodyView() string {
+	if m.mode == modeRun {
+		content := m.content.View()
+		if !m.outline.visible {
+			return content
+		}
+		gutter := make([]string, m.content.Height)
+		for i := range gutter {
+			gutter[i] = strings.Repeat(" ", gutterWidth)
+		}
+		return lipgloss.JoinHorizontal(lipgloss.Top,
+			content,
+			strings.Join(gutter, "\n"),
+			m.globalsView(m.content.Height),
+		)
+	}
+
 	if m.renderErr != "" {
 		return errStyle.Render("render error: " + m.renderErr)
 	}
@@ -349,9 +457,12 @@ func (m Model) sepView() string {
 	return sepStyle.Render(strings.Repeat("─", max(1, m.width)))
 }
 
-// helpView is the status bar: muted key hints on the left, position info on
-// the right.
-func (m Model) helpView() string {
+// statusView is the bottom bar: muted key hints or run state on the left,
+// position info on the right.
+func (m Model) statusView() string {
+	if m.mode == modeRun {
+		return m.runStatus()
+	}
 	m.help.ShowAll = m.showHelp
 	left := m.help.View(m.keys)
 	total := 0
@@ -399,5 +510,3 @@ func clamp(v, lo, hi int) int {
 func colorEnabled() bool {
 	return lipgloss.ColorProfile() != termenv.Ascii
 }
-
-var _ = os.Stdout

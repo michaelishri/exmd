@@ -74,7 +74,9 @@ optimizes for human use.
 - [x] Headless utilities: `check`, `list`, `globals`, `print`
 - [x] TUI viewer: rendered content pane + outline/blocks sidebar (borderless, OpenCode-style)
 - [x] Execution core: `bash` and `python3` adapters, env harvest
-- [ ] TUI execution UX: run controls, globals inspector, step-through
+- [x] TUI execution UX: `r` runs the document with live block output and a
+      live globals inspector; `v` returns; `md-exec DOC --set K=V` overrides
+      (deferred: block step-through, run cancellation)
 
 ## Docs
 

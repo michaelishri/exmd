@@ -11,14 +11,19 @@ import (
 
 func newViewer(t *testing.T, w, h int) Model {
 	t.Helper()
-	res, err := doc.Load("../../examples/demo/demo.md")
+	return newViewerFromDoc(t, w, h, "../../examples/demo/demo.md", map[string]string{"JOB_NAME": "nightly"})
+}
+
+func newViewerFromDoc(t *testing.T, w, h int, path string, overrides map[string]string) Model {
+	t.Helper()
+	res, err := doc.Load(path)
 	if err != nil {
-		t.Fatalf("load demo: %v", err)
+		t.Fatalf("load %s: %v", path, err)
 	}
 	if res.HasErrors() {
-		t.Fatalf("demo has errors")
+		t.Fatalf("%s has errors", path)
 	}
-	m, _ := New(res).Update(tea.WindowSizeMsg{Width: w, Height: h})
+	m, _ := New(res, overrides).Update(tea.WindowSizeMsg{Width: w, Height: h})
 	return m.(Model)
 }
 

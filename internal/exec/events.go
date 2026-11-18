@@ -43,6 +43,10 @@ const (
 	// EventWarning reports a closed-world violation (SPEC.md §4.4): an
 	// undeclared export was ignored.
 	EventWarning
+	// EventGlobals carries a Globals snapshot: emitted once before the
+	// first block and after each block's harvest, so interfaces can show
+	// state evolving (§4.8).
+	EventGlobals
 )
 
 func (k EventKind) String() string {
@@ -66,4 +70,5 @@ type Event struct {
 	Data    []byte
 	Status  int
 	Message string
+	Globals map[string]string // EventGlobals snapshot; treat as read-only
 }
