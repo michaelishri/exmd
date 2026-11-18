@@ -23,6 +23,7 @@ func Load(path string) (*Result, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf")) // UTF-8 BOM
+	src = []byte(normalizeNewlines(string(src)))
 
 	dir := filepath.Dir(path)
 	if abs, absErr := filepath.Abs(path); absErr == nil {
@@ -34,10 +35,12 @@ func Load(path string) (*Result, error) {
 		Dir:         dir,
 		SpecVersion: 1,
 		Globals:     map[string]*string{},
+		Source:      src,
 	}
 	res := &Result{Doc: d}
 
-	yamlSrc, openLine, closed, masked := splitFrontmatter(src)
+	yamlSrc, openLine, closed, bodyLine, masked := splitFrontmatter(src)
+	d.BodyLine = bodyLine
 	switch {
 	case openLine == 0:
 		// No frontmatter: the document cannot be a runbook (SPEC.md §2.1).

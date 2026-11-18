@@ -16,20 +16,21 @@ var globalNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 //
 // It returns the raw YAML between the `---` markers, the 1-based line of the
 // opening marker (0 when there is no frontmatter), whether a closing marker
-// was found, and a copy of the source in which the YAML content is blanked
-// out with spaces. The masked copy has identical byte offsets, so Markdown
-// parsing over it yields source positions that are valid for the original.
-func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, masked []byte) {
+// was found, the 1-based first line after the frontmatter, and a copy of the
+// source in which the YAML content is blanked out with spaces. The masked
+// copy has identical byte offsets, so Markdown parsing over it yields source
+// positions that are valid for the original.
+func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, bodyLine int, masked []byte) {
 	first, rest, hasNL := bytes.Cut(src, []byte("\n"))
 	if strings.TrimRight(string(first), " \t\r") != "---" {
-		return nil, 0, false, src
+		return nil, 0, false, 1, src
 	}
 	openLine = 1
 	masked = append([]byte(nil), src...)
 
 	if !hasNL {
 		// The file is exactly "---" with no trailing newline.
-		return nil, openLine, false, masked
+		return nil, openLine, false, 1, masked
 	}
 
 	offset := len(first) + 1 // start of line 2
@@ -50,14 +51,15 @@ func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, ma
 					masked[i] = ' '
 				}
 			}
-			return yamlSrc, openLine, true, masked
+			closing := 1 + bytes.Count(src[:closeStart], []byte{'\n'})
+			return yamlSrc, openLine, true, closing + 1, masked
 		}
 		if eol < 0 {
 			break
 		}
 		pos += eol + 1
 	}
-	return nil, openLine, false, masked
+	return nil, openLine, false, 1, masked
 }
 
 // parseFrontmatter validates the frontmatter YAML and fills in d. It reports

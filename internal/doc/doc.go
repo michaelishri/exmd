@@ -63,6 +63,12 @@ type Document struct {
 	IsRunbook   bool
 	TypeValue   string // `type` exactly as written ("" when absent)
 
+	// Source is the BOM-stripped, newline-normalized source text; line
+	// numbers are unchanged. BodyLine is the 1-based first line after the
+	// frontmatter (1 when there is none).
+	Source   []byte
+	BodyLine int
+
 	// Globals holds the declared globals (SPEC.md §2.2). A nil pointer is a
 	// bare key: declared, starts absent.
 	Globals map[string]*string
