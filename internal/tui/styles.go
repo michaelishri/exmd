@@ -25,6 +25,14 @@ var (
 	accentStyle     lipgloss.Style
 	successStyle    lipgloss.Style
 	warnStyle       lipgloss.Style
+
+	// sideTitleStyle renders the sidebar's title row — the document's
+	// first h1: bright bold text on the panel background.
+	sideTitleStyle lipgloss.Style
+
+	// rowHiStyle shades top-level heading rows (h1/h2) with bright text;
+	// deeper heading levels use rowStyle's muted text.
+	rowHiStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -77,4 +85,13 @@ func buildStyles() {
 
 	warnStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Warning))
+
+	sideTitleStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Text)).
+		Background(lipgloss.Color(t.BackgroundPanel)).
+		Bold(true)
+
+	rowHiStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Text)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 }

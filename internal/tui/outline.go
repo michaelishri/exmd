@@ -56,7 +56,19 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	o.entries = o.entries[:0]
 	switch o.tab {
 	case tabHeadings:
+		// The first h1 is the sidebar's title row, not a selectable
+		// entry — the outline starts with whatever follows it.
+		skip := -1
 		for i, h := range d.Headings {
+			if h.Level == 1 {
+				skip = i
+				break
+			}
+		}
+		for i, h := range d.Headings {
+			if i == skip {
+				continue
+			}
 			if i >= len(out.Headings) {
 				break
 			}
@@ -126,10 +138,11 @@ func (o *outlineModel) last() bool {
 // top and bottom of the column.
 const panePad = 1
 
-// view renders the sidebar as a full-height shaded column: the document's
-// first h1 as the title row, then the entries inset one blank row at the
-// top and bottom of the column. The viewer's outer margins (one row
-// top/bottom, one column right) sit outside the strip.
+// view renders the sidebar as a full-height shaded column: a blank pad
+// row, the document's first h1 as the title row (two columns in), a blank
+// pad row, then the entries inset one blank row at the bottom of the
+// column. The viewer's outer margins (one row top/bottom, one column
+// right) sit outside the strip.
 func (o *outlineModel) view(height int) string {
 	if !o.visible {
 		return ""
@@ -139,12 +152,18 @@ func (o *outlineModel) view(height int) string {
 	for r := range rows {
 		rows[r] = rowStyle.Width(o.width).Render("")
 	}
+	setRow := func(r int, s string) {
+		if 0 <= r && r < height {
+			rows[r] = s
+		}
+	}
 
-	// Title row: the document's first h1.
-	rows[0] = tabTitleStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + o.title)
+	// Blank pad, then the title row, then a blank pad.
+	const titlePad = 2
+	setRow(1, sideTitleStyle.Width(o.width).Render(
+		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
 
-	const titleRows = 1
-	top := titleRows + 1 // title + blank pad
+	top := 3 // pad + title + pad
 	bottomPad := 1
 	visible := height - top - bottomPad
 	if visible < 1 {
@@ -166,9 +185,7 @@ func (o *outlineModel) view(height int) string {
 		if o.tab == tabBlocks {
 			empty = "no blocks"
 		}
-		if top < height {
-			rows[top] = emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad) + empty)
-		}
+		setRow(top, emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad)+empty))
 		return strings.Join(rows, "\n")
 	}
 
@@ -199,10 +216,15 @@ func (o *outlineModel) view(height int) string {
 			// The marker occupies two cells after the base pad, so the
 			// text budget is two columns tighter to keep the right edge.
 			text := ansi.Truncate(label, o.width-panePad-3, "…")
-			rows[row] = selRowStyle.Width(o.width).Render(pad + markerStyle.Render("▸") + " " + text)
+			setRow(row, selRowStyle.Width(o.width).Render(pad+markerStyle.Render("▸")+" "+text))
 		} else {
+			// h1/h2 rows read bright; deeper heading levels stay muted.
+			rowBg := rowStyle
+			if o.tab == tabHeadings && e.level <= 2 {
+				rowBg = rowHiStyle
+			}
 			text := ansi.Truncate(label, o.width-panePad-1, "…")
-			rows[row] = rowStyle.Width(o.width).Render(pad + text)
+			setRow(row, rowBg.Width(o.width).Render(pad+text))
 		}
 	}
 	return strings.Join(rows, "\n")

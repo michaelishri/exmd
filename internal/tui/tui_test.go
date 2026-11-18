@@ -82,29 +82,29 @@ func TestViewerNarrowHidesSidebar(t *testing.T) {
 func TestViewerFocusAndNavigation(t *testing.T) {
 	m := newViewer(t, 120, 40)
 
-	// Above the first heading the unified cursor sits on heading 0 (the
-	// document title renders at line 0); tab focuses the sidebar, j moves to
-	// the next section and jumps the content to it.
+	// Above the first heading the unified cursor rests on no entry: the
+	// h1 is the title row and is not selectable. Tab focuses the sidebar,
+	// j moves to the next section and jumps the content to it.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got := mm.(Model)
 	if got.focus != focusOutline {
 		t.Fatal("tab did not move focus to the sidebar")
 	}
-	if got.outline.sel != 0 {
-		t.Fatalf("initial sel = %d, want 0", got.outline.sel)
+	if got.outline.sel != -1 {
+		t.Fatalf("initial sel = %d, want -1", got.outline.sel)
 	}
 
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	got = mm.(Model)
-	if got.outline.sel != 1 {
-		t.Fatalf("sel = %d, want 1", got.outline.sel)
+	if got.outline.sel != 0 {
+		t.Fatalf("sel = %d, want 0", got.outline.sel)
 	}
-	wantY := got.outline.entries[1].renderLine - 1
+	wantY := got.outline.entries[0].renderLine - 1
 	if got.content.YOffset != wantY {
 		t.Fatalf("YOffset = %d, want %d", got.content.YOffset, wantY)
 	}
 
-	// k moves back.
+	// k at the first entry stays put.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	got = mm.(Model)
 	if got.outline.sel != 0 {
@@ -133,9 +133,10 @@ func TestViewerSpyFollowsScroll(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
 	got := mm.(Model)
-	// At the bottom of the document the current heading is the last one.
-	if got.outline.sel != len(got.doc.Headings)-1 {
-		t.Fatalf("sel = %d, want last heading", got.outline.sel)
+	// At the bottom of the document the current heading is the last one;
+	// the first h1 is the title row and is not among the entries.
+	if got.outline.sel != len(got.outline.entries)-1 {
+		t.Fatalf("sel = %d, want last entry", got.outline.sel)
 	}
 	if !got.content.AtBottom() {
 		t.Fatal("G did not reach the bottom")

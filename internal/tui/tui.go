@@ -385,15 +385,18 @@ func (m *Model) updateSpy() {
 	off := m.content.YOffset
 	idx := -1
 	if m.outline.tab == tabHeadings {
-		for i, h := range m.out.Headings {
-			if h.Line <= off+1 {
+		// Entries carry the rendered line of their heading; the first h1
+		// has no entry (it is the title row), so nothing is selected while
+		// the reader is inside its section.
+		for i, e := range m.outline.entries {
+			if e.renderLine <= off+1 {
 				idx = i
 			} else {
 				break
 			}
 		}
-		if m.content.AtBottom() && len(m.out.Headings) > 0 {
-			idx = len(m.out.Headings) - 1
+		if m.content.AtBottom() && len(m.outline.entries) > 0 {
+			idx = len(m.outline.entries) - 1
 		}
 	} else {
 		for i, b := range m.out.Blocks {
