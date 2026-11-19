@@ -37,7 +37,8 @@ var (
 	// text area.
 	gutterBarStyle lipgloss.Style
 
-	// frameStyle draws the border around the entire viewport.
+	// frameStyle draws the border around the entire viewport — the muted
+	// chrome color: clearly visible against the canvas without shouting.
 	frameStyle lipgloss.Style
 )
 
@@ -104,5 +105,5 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.Primary))
 
 	frameStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Border))
+		Foreground(lipgloss.Color(t.TextMuted))
 }
