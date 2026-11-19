@@ -14,13 +14,12 @@ import (
 
 // TestOutlinePaddingAndSpacing checks the sidebar geometry: the strip is
 // full height; a blank pad row, the title row (the document's first h1, two
-// columns in), a blank pad row, then the entries — one column of base left
-// padding, and an empty line after every heading row, like the title row
-// has. Blank shaded rows fill the rest, and the outer margins sit outside
-// the strip.
+// columns in), a blank pad row, then the packed entries (one column of base
+// left padding, no blank lines between entries); blank shaded rows fill the
+// rest, and the outer margin rows sit outside the strip.
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	rows := m.paneHeight
+	rows := m.content.Height
 	v := m.outline.view(rows, false)
 	lines := strings.Split(v, "\n")
 	if len(lines) != rows {
@@ -44,12 +43,13 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 
 	// The entries sit below the pads: the first h1 is the title row and is
 	// not a selectable entry, so the outline starts with the next heading.
-	// Each entry is followed by an empty line, like the title row.
+	// Nothing is selected while the reader is in the h1's section, so the
+	// first entry row has no marker yet.
 	n := len(m.outline.entries)
 	if n < 2 {
 		t.Fatalf("demo should have several headings, got %d", n)
 	}
-	if 2*n > rows-4 {
+	if n > rows-4 {
 		t.Fatalf("demo headings exceed the sidebar: %d", n)
 	}
 	if m.outline.sel != -1 {
@@ -59,16 +59,12 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 		!strings.Contains(lines[3], "1. Preflight and point-of-use guards") {
 		t.Fatalf("first entry wrong: %q", lines[3])
 	}
-	for r := 0; r < n; r++ {
-		entry := lines[3+2*r]
-		if strings.TrimSpace(entry) == "" {
-			t.Fatalf("entry row %d is blank", 3+2*r)
+	for r := 4; r <= n+2; r++ {
+		if strings.TrimSpace(lines[r]) == "" {
+			t.Fatalf("row %d is blank: blank lines were removed", r)
 		}
-		if !strings.HasPrefix(entry, " ") {
-			t.Fatalf("entry row %d has no base padding: %q", 3+2*r, entry)
-		}
-		if r+1 < n && strings.TrimSpace(lines[3+2*r+1]) != "" {
-			t.Fatalf("no empty line after entry row %d: %q", 3+2*r, lines[3+2*r+1])
+		if !strings.HasPrefix(lines[r], " ") {
+			t.Fatalf("row %d has no base padding: %q", r, lines[r])
 		}
 	}
 	// Blank shaded rows fill the rest of the column — full height, with
@@ -340,10 +336,10 @@ func TestHeadingRowShading(t *testing.T) {
 	v := m.outline.view(m.paneHeight, false)
 	lines := strings.Split(v, "\n")
 
-	// Entries start at row 3, spaced two rows apart: entry 0 is an h2
-	// (1. Preflight…), entry 5 is an h3 (5.1 From bash).
+	// Entries start at row 3: entry 0 is an h2 (1. Preflight…), entry 5 is
+	// an h3 (5.1 From bash).
 	h2 := lines[3]
-	h3 := lines[3+2*5]
+	h3 := lines[3+5]
 	if !strings.Contains(ansi.Strip(h2), "1. Preflight") ||
 		!strings.Contains(ansi.Strip(h3), "5.1 From bash") {
 		t.Fatal("test setup: rows are not the expected entries")
