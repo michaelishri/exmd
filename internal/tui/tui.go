@@ -468,20 +468,47 @@ func (m Model) bodyView() string {
 	if !m.outline.visible {
 		return content
 	}
-	gutter := make([]string, m.content.Height)
-	for i := range gutter {
-		gutter[i] = strings.Repeat(" ", gutterWidth)
-	}
 	margin := make([]string, m.content.Height)
 	for i := range margin {
 		margin[i] = " "
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		content,
-		strings.Join(gutter, "\n"),
+		m.gutterView(),
 		m.outlineView(),
 		strings.Join(margin, "\n"),
 	)
+}
+
+// gutterView builds the gutter between the content and the sidebar: blank,
+// except a primary-colored bar beside the lines of the currently selected
+// sidebar entry's section (its heading through the next one). The bar
+// tracks the selection whether it came from the cursor or the scroll-spy,
+// and renders nothing when no entry is selected.
+func (m Model) gutterView() string {
+	rows := make([]string, m.content.Height)
+	for i := range rows {
+		rows[i] = strings.Repeat(" ", gutterWidth)
+	}
+	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
+		return strings.Join(rows, "\n")
+	}
+
+	// Section extent in 1-based rendered lines: from the selected entry's
+	// line through the line before the next entry's (or the document end).
+	start := m.outline.entries[m.outline.sel].renderLine
+	end := len(m.out.Lines) + 1
+	if m.outline.sel+1 < len(m.outline.entries) {
+		end = m.outline.entries[m.outline.sel+1].renderLine
+	}
+
+	bar := gutterBarStyle.Render("▌")
+	for r := 0; r < m.content.Height; r++ {
+		if line := m.content.YOffset + r + 1; line >= start && line < end {
+			rows[r] = bar + strings.Repeat(" ", gutterWidth-1)
+		}
+	}
+	return strings.Join(rows, "\n")
 }
 
 func (m Model) outlineView() string {

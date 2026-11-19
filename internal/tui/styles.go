@@ -32,6 +32,9 @@ var (
 	// rowHiStyle shades top-level heading rows (h1/h2) with bright text;
 	// deeper heading levels use rowStyle's muted text.
 	rowHiStyle lipgloss.Style
+
+	// gutterBarStyle colors the selection rail in the left gutter.
+	gutterBarStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -92,4 +95,7 @@ func buildStyles() {
 	rowHiStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).
 		Background(lipgloss.Color(t.BackgroundPanel))
+
+	gutterBarStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Primary))
 }

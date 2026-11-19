@@ -74,6 +74,49 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 	}
 }
 
+// TestGutterSelectionBar checks the selection rail in the left gutter: no
+// bar renders without a selection; with an entry selected, the bar covers
+// exactly its section's visible lines (its heading through the next).
+func TestGutterSelectionBar(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	if v := m.View(); strings.Contains(v, "▌") {
+		t.Fatal("no bar should render without a selection")
+	}
+
+	// Focus the sidebar and select the first entry.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := mm.(Model)
+	if got.outline.sel != 0 {
+		t.Fatalf("sel = %d, want 0", got.outline.sel)
+	}
+
+	// Section extent in rendered lines: the selected entry's line through
+	// the line before the next entry's.
+	start := got.outline.entries[0].renderLine
+	end := len(got.out.Lines) + 1
+	if len(got.outline.entries) > 1 {
+		end = got.outline.entries[1].renderLine
+	}
+	want := end - start
+	if want > got.content.Height {
+		want = got.content.Height
+	}
+
+	// After the jump the section starts at the top of the viewport, so the
+	// bar should cover the first `want` gutter rows.
+	v := got.View()
+	if n := strings.Count(v, "▌"); n != want {
+		t.Fatalf("bar rows = %d, want %d", n, want)
+	}
+	// And the first bar row is the first body row (View line 1 is body
+	// row 0; the jump put the section's start at the top of the viewport).
+	lines := strings.Split(v, "\n")
+	if bar := strings.Index(lines[1], "▌"); bar < 0 {
+		t.Fatalf("bar missing on the first body row: %q", lines[1])
+	}
+}
+
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
 // shift its text: the stripped row is identical before and after, and the
 // background carries the selection instead.
