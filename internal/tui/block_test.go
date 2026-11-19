@@ -168,13 +168,13 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	}
 	got = pump(t, got, cmd)
 
-	if !got.inline.done {
+	if !got.inline[0].done {
 		t.Fatal("inline run did not finish")
 	}
-	if got.inline.err != nil || (got.inline.result != nil && got.inline.result.Failed != nil) {
-		t.Fatalf("inline run failed: %v / %+v", got.inline.err, got.inline.result)
+	if got.inline[0].err != nil || (got.inline[0].result != nil && got.inline[0].result.Failed != nil) {
+		t.Fatalf("inline run failed: %v / %+v", got.inline[0].err, got.inline[0].result)
 	}
-	joined := strings.Join(got.inline.lines, "\n")
+	joined := strings.Join(got.inline[0].lines, "\n")
 	if !strings.Contains(joined, "author:  Michael Ishri") {
 		t.Fatalf("block output missing: %q", joined)
 	}
@@ -183,8 +183,8 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	// separator, then the output rows.
 	lines := got.contentLines()
 	bm := got.out.Blocks[0]
-	if len(lines) != len(got.out.Lines)+len(got.inline.box) {
-		t.Fatalf("content lines = %d, want %d", len(lines), len(got.out.Lines)+len(got.inline.box))
+	if len(lines) != len(got.out.Lines)+len(got.inline[0].box) {
+		t.Fatalf("content lines = %d, want %d", len(lines), len(got.out.Lines)+len(got.inline[0].box))
 	}
 	if !strings.Contains(ansi.Strip(lines[bm.End]), "─") {
 		t.Fatalf("no separator at the block's end: %q", ansi.Strip(lines[bm.End]))
@@ -209,7 +209,7 @@ func TestRunSelectedBlockInline(t *testing.T) {
 		t.Fatalf("output indent %d does not match code indent %d",
 			leading(lines[bm.End+1]), leading(codeLine))
 	}
-	last := lines[bm.End+len(got.inline.box)-1]
+	last := lines[bm.End+len(got.inline[0].box)-1]
 	if strings.TrimSpace(ansi.Strip(last)) != "" {
 		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
 	}
@@ -232,6 +232,54 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	got = mm.(Model)
 	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
 		t.Fatal("status bar disappeared when returning to heading selection")
+	}
+}
+
+// TestInlineOutputsPersistAcrossRuns checks that running a second block
+// does not reset the first block's output or its green status bar.
+func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	got := enterBlockModeFromFirstHeading(t, m) // selects block 0
+
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = pump(t, mm.(Model), cmd)
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown}) // block 1
+	got = mm.(Model)
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = pump(t, mm.(Model), cmd)
+
+	content := strings.Join(got.contentLines(), "\n")
+	if !strings.Contains(content, "author:  Michael Ishri") {
+		t.Fatal("first block's output was lost")
+	}
+	if !strings.Contains(content, "inside this block:") {
+		t.Fatal("second block's output is missing")
+	}
+	if want := len(got.out.Lines) + len(got.inline[0].box) + len(got.inline[1].box); len(got.contentLines()) != want {
+		t.Fatalf("content lines = %d, want %d (both boxes spliced)",
+			len(got.contentLines()), want)
+	}
+
+	// Both blocks still carry their green status bar, at their own
+	// display positions (after the earlier box is accounted for).
+	viewLines := strings.Split(got.View(), "\n")
+	for _, index := range []int{0, 1} {
+		bm := got.out.Blocks[index]
+		start := got.displayLine(bm.Line+1) - got.content.YOffset + 1
+		end := got.displayLine(bm.End) - got.content.YOffset + 1
+		found := false
+		for r := start; r < end && r < got.paneHeight && r+1 < len(viewLines); r++ {
+			if strings.Contains(viewLines[1+r], railDoneStyle.Render("▌")) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("block %d's status bar is missing", index)
+		}
 	}
 }
 
@@ -258,8 +306,8 @@ func TestInlineFailureRailTurnsRed(t *testing.T) {
 	got = mm.(Model)
 	got = pump(t, got, cmd)
 
-	if got.inline.status == 0 {
-		t.Fatalf("expected a failing block, status = %d", got.inline.status)
+	if got.inline[1].status == 0 {
+		t.Fatalf("expected a failing block, status = %d", got.inline[1].status)
 	}
 	if !strings.Contains(got.View(), railFailStyle.Render("▌")) {
 		t.Fatal("failed block's rail should be red")
