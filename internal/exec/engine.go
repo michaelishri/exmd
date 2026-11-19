@@ -8,11 +8,17 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
-	"sort"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/michaelishri/md-exec/internal/doc"
+)
+
+const (
+	exitNoAdapter = 127 // no adapter for a block's language
+	exitSetup     = 126 // staging or launch failure
+	killGrace     = 2 * time.Second
 )
 
 // Options configures a run.
@@ -55,10 +61,9 @@ type RunResult struct {
 
 // BlockResult reports one block's execution via Session.RunNext.
 type BlockResult struct {
-	Block       *doc.Block // nil when Done
-	Status      int
-	Done        bool // no more blocks to run
-	Interrupted bool // this block was terminated by context cancellation
+	Block  *doc.Block // nil when Done
+	Status int
+	Done   bool // no more blocks to run
 }
 
 // Session executes a document block by block, carrying the global state
@@ -85,6 +90,10 @@ type Session struct {
 	emittedInitial bool
 	blockKilled    bool
 	closed         bool
+
+	// emitMu serializes event delivery: stdout and stderr are copied by
+	// separate goroutines that both call emit.
+	emitMu sync.Mutex
 }
 
 // NewSession resolves launch-time overrides (§2.2), stages the harnesses,
@@ -127,6 +136,17 @@ func NewSession(d *doc.Document, opts Options) (*Session, error) {
 		hostEnv:  hostEnv,
 		tmpDir:   tmpDir,
 	}, nil
+}
+
+// send delivers an event under a lock so consumers never see concurrent
+// callbacks from the stdout and stderr copy goroutines.
+func (s *Session) send(emit func(Event), ev Event) {
+	if emit == nil {
+		return
+	}
+	s.emitMu.Lock()
+	emit(ev)
+	s.emitMu.Unlock()
 }
 
 // Remaining reports how many blocks have not run yet.
@@ -184,22 +204,22 @@ func (s *Session) RunNext(ctx context.Context, emit func(Event)) BlockResult {
 	if s.closed || s.next >= len(s.d.Blocks) {
 		return BlockResult{Done: true}
 	}
-	return s.runAt(ctx, s.next, emit)
+	return s.executeAndAdvance(ctx, s.next, emit)
 }
 
-// RunBlock executes the block at index (0-based) in isolation, regardless
-// of the session's position: the state is the launch-time state (frontmatter
-// defaults plus overrides, §2.2–§4.2) and the harvest applies to it (§4.3).
-// Afterwards the session continues after the block.
+// RunBlock executes the block at index (0-based), regardless of the
+// session's position. It uses the session's current global state, so a
+// harvest from an earlier block is visible (§4.3); afterwards the session
+// continues after the block.
 func (s *Session) RunBlock(ctx context.Context, index int, emit func(Event)) BlockResult {
 	if s.closed || index < 0 || index >= len(s.d.Blocks) {
 		return BlockResult{Done: true}
 	}
-	return s.runAt(ctx, index, emit)
+	return s.executeAndAdvance(ctx, index, emit)
 }
 
-// runAt executes the block at index and advances the session past it.
-func (s *Session) runAt(ctx context.Context, index int, emit func(Event)) BlockResult {
+// executeAndAdvance executes the block at index and advances the session past it.
+func (s *Session) executeAndAdvance(ctx context.Context, index int, emit func(Event)) BlockResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -208,7 +228,7 @@ func (s *Session) runAt(ctx context.Context, index int, emit func(Event)) BlockR
 	}
 	if !s.emittedInitial {
 		s.emittedInitial = true
-		emit(Event{Kind: EventGlobals, Globals: s.Globals()})
+		s.send(emit, Event{Kind: EventGlobals, Globals: s.Globals()})
 	}
 
 	s.blockKilled = false
@@ -216,59 +236,49 @@ func (s *Session) runAt(ctx context.Context, index int, emit func(Event)) BlockR
 	s.next = index + 1
 	s.blocksRun++
 
-	emit(Event{Kind: EventBlockStart, Block: b})
-	status := s.runBlock(ctx, b, emit)
-	emit(Event{Kind: EventBlockEnd, Block: b, Status: status})
+	s.send(emit, Event{Kind: EventBlockStart, Block: b})
+	status := s.executeBlock(ctx, b, emit)
+	s.send(emit, Event{Kind: EventBlockEnd, Block: b, Status: status})
 
-	if status != 0 {
+	// A cancelled block can exit 0 (e.g. a SIGTERM trap), so the kill flag —
+	// not just the status — decides whether the run stops here (§4.7).
+	if status != 0 || s.blockKilled {
 		s.lastFailed = b
 		s.lastStatus = status
 		if s.blockKilled {
 			s.interrupted = true
 		}
 	}
-	return BlockResult{Block: b, Status: status, Interrupted: s.blockKilled}
+	return BlockResult{Block: b, Status: status}
 }
 
 // warn records a closed-world notice and emits it (§4.4).
 func (s *Session) warn(emit func(Event), format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	s.warnings = append(s.warnings, msg)
-	emit(Event{Kind: EventWarning, Message: msg})
+	s.send(emit, Event{Kind: EventWarning, Message: msg})
 }
 
-// runBlock executes one block (§4.2–§4.6) and applies its harvest delta
+// executeBlock executes one block (§4.2–§4.6) and applies its harvest delta
 // before its status is evaluated (§4.3, §4.7).
-func (s *Session) runBlock(ctx context.Context, b *doc.Block, emit func(Event)) int {
+func (s *Session) executeBlock(ctx context.Context, b *doc.Block, emit func(Event)) int {
 	adapter, ok := Lookup(b.Lang)
 	if !ok {
 		// Pre-flight (§5.3) prevents this; fail loudly if a caller skipped it.
 		s.warn(emit, "no adapter for language `%s`", b.Lang)
-		return 127
+		return exitNoAdapter
+	}
+
+	srcPath, status := s.stageSource(b, adapter, emit)
+	if status != 0 {
+		return status
+	}
+	envOut, status := s.stageEnvOut(b, emit)
+	if status != 0 {
+		return status
 	}
 
 	envIn := compose(s.hostEnv, s.declared, s.globals)
-
-	var srcPath string
-	if b.Kind == doc.KindScript {
-		srcPath = b.ScriptAbs
-	} else {
-		p := filepath.Join(s.tmpDir, fmt.Sprintf("block-%03d.%s", b.Index, adapter.Ext))
-		if err := os.WriteFile(p, []byte(b.Body), 0o600); err != nil {
-			s.warn(emit, "cannot stage block source: %v", err)
-			return 126
-		}
-		srcPath = p
-	}
-
-	envOut := filepath.Join(s.tmpDir, fmt.Sprintf("env-%03d.txt", b.Index))
-	if f, err := os.Create(envOut); err != nil {
-		s.warn(emit, "cannot stage env dump: %v", err)
-		return 126
-	} else {
-		f.Close()
-	}
-
 	childEnv := make([]string, 0, len(envIn)+2)
 	childEnv = append(childEnv, envIn...)
 	childEnv = append(childEnv,
@@ -276,24 +286,65 @@ func (s *Session) runBlock(ctx context.Context, b *doc.Block, emit func(Event)) 
 		"__MDEXEC_ENVOUT="+envOut,
 	)
 
+	cmd := s.command(b, adapter, childEnv, emit)
+	if err := cmd.Start(); err != nil {
+		s.warn(emit, "cannot start `%s`: %v", adapter.Bin, err)
+		return exitSetup
+	}
+
+	waitCh := make(chan error, 1)
+	go func() { waitCh <- cmd.Wait() }()
+	status = s.waitFor(ctx, cmd, waitCh)
+
+	s.harvest(b, childEnv, envOut, emit)
+	s.send(emit, Event{Kind: EventGlobals, Globals: s.Globals()})
+	return status
+}
+
+// stageSource writes an embedded block to the staging directory. Script
+// references already point at a file and need no staging.
+func (s *Session) stageSource(b *doc.Block, adapter Adapter, emit func(Event)) (string, int) {
+	if b.Kind == doc.KindScript {
+		return b.ScriptAbs, 0
+	}
+	p := filepath.Join(s.tmpDir, fmt.Sprintf("block-%03d.%s", b.Index, adapter.Ext))
+	if err := os.WriteFile(p, []byte(b.Body), 0o600); err != nil {
+		s.warn(emit, "cannot stage block source: %v", err)
+		return "", exitSetup
+	}
+	return p, 0
+}
+
+// stageEnvOut creates the empty file the harness fills with its final
+// environment.
+func (s *Session) stageEnvOut(b *doc.Block, emit func(Event)) (string, int) {
+	path := filepath.Join(s.tmpDir, fmt.Sprintf("env-%03d.txt", b.Index))
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		s.warn(emit, "cannot stage env dump: %v", err)
+		return "", exitSetup
+	}
+	return path, 0
+}
+
+// command builds the process for one block. It runs in its own process group
+// so cancellation can stop the harness and all its children (§4.7).
+func (s *Session) command(b *doc.Block, adapter Adapter, childEnv []string, emit func(Event)) *osexec.Cmd {
 	cmd := adapter.command(s.tmpDir)
 	cmd.Dir = s.d.Dir // blocks run in docdir (§4.2)
 	cmd.Env = childEnv
 	cmd.Stdin = nil // empty stream: runbooks are non-interactive (§4.6)
 	cmd.Stdout = s.writer(b, StreamStdout, emit)
 	cmd.Stderr = s.writer(b, StreamStderr, emit)
-	// Own process group so cancellation can terminate the harness and
-	// everything it spawned as a unit (§4.7). Unix only.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Bound Wait. If a consumer stops reading events, the copy goroutines
+	// block and Wait would not return after the process died.
+	cmd.WaitDelay = killGrace
+	return cmd
+}
 
-	if err := cmd.Start(); err != nil {
-		s.warn(emit, "cannot start `%s`: %v", adapter.Bin, err)
-		return 126
-	}
-
-	waitCh := make(chan error, 1)
-	go func() { waitCh <- cmd.Wait() }()
-
+// waitFor waits for a block. On cancellation it terminates the process group:
+// SIGTERM first, then SIGKILL after a grace period (§4.7).
+func (s *Session) waitFor(ctx context.Context, cmd *osexec.Cmd, waitCh <-chan error) int {
 	status := 0
 	select {
 	case err := <-waitCh:
@@ -306,47 +357,38 @@ func (s *Session) runBlock(ctx context.Context, b *doc.Block, emit func(Event)) 
 			}
 		}
 	case <-ctx.Done():
-		// §4.7: terminate the current block — SIGTERM the group, then
-		// SIGKILL after a grace period. The EXIT trap / atexit hook will
-		// not run; a missing dump simply means no harvest.
 		s.blockKilled = true
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 		select {
 		case <-waitCh:
-		case <-time.After(2 * time.Second):
+		case <-time.After(killGrace):
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			<-waitCh
+			select {
+			case <-waitCh:
+			case <-time.After(killGrace):
+				status = -1
+			}
 		}
-		if cmd.ProcessState != nil {
+		if status == 0 && cmd.ProcessState != nil {
 			status = cmd.ProcessState.ExitCode()
-		} else {
-			status = -1
 		}
 	}
-
-	s.harvest(b, childEnv, envOut, emit)
-	emit(Event{Kind: EventGlobals, Globals: s.Globals()})
 	return status
 }
 
 // harvest applies the block's environment delta to the globals (§4.3): the
 // closed world keeps undeclared names out (§4.4), removals propagate, and
 // the delta applies even when the block failed (§4.7).
-func (s *Session) harvest(b *doc.Block, envIn []string, envOut string, emit func(Event)) {
+func (s *Session) harvest(b *doc.Block, childEnv []string, envOut string, emit func(Event)) {
 	data, err := os.ReadFile(envOut)
 	if err != nil || len(data) == 0 {
 		// No usable dump (e.g. the block was killed or replaced its
 		// process): no delta.
 		return
 	}
-	set, removed := diffEnv(envIn, parseEnv(data))
+	set, removed := diffEnv(childEnv, parseEnv(data))
 
-	names := make([]string, 0, len(set))
-	for name := range set {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range sortedKeys(set) {
 		if _, managed := shellManaged[name]; managed {
 			continue // interpreter infrastructure, never document state (§5.1.6)
 		}
@@ -369,27 +411,33 @@ func (s *Session) harvest(b *doc.Block, envIn []string, envOut string, emit func
 // writer returns the destination for a block's stream: the caller's writer
 // plus, when events are enabled, an observation tap (§4.8).
 func (s *Session) writer(b *doc.Block, st Stream, emit func(Event)) io.Writer {
-	var out io.Writer = io.Discard
-	if st == StreamStdout && s.opts.Stdout != nil {
-		out = s.opts.Stdout
-	}
-	if st == StreamStderr && s.opts.Stderr != nil {
-		out = s.opts.Stderr
-	}
+	out := s.opts.writerFor(st)
 	if emit == nil {
 		return out
 	}
-	return io.MultiWriter(out, &eventWriter{emit: emit, b: b, st: st})
+	return io.MultiWriter(out, &eventWriter{s: s, emit: emit, b: b, st: st})
+}
+
+// writerFor selects the configured destination for a stream.
+func (o Options) writerFor(st Stream) io.Writer {
+	if st == StreamStdout && o.Stdout != nil {
+		return o.Stdout
+	}
+	if st == StreamStderr && o.Stderr != nil {
+		return o.Stderr
+	}
+	return io.Discard
 }
 
 type eventWriter struct {
+	s    *Session
 	emit func(Event)
 	b    *doc.Block
 	st   Stream
 }
 
 func (w *eventWriter) Write(p []byte) (int, error) {
-	w.emit(Event{
+	w.s.send(w.emit, Event{
 		Kind:   EventOutput,
 		Block:  w.b,
 		Stream: w.st,
@@ -418,10 +466,11 @@ func Run(ctx context.Context, d *doc.Document, opts Options) (*RunResult, error)
 		}
 	}
 	for {
-		if s.RunNext(ctx, emit).Done {
-			break
+		if ctx.Err() != nil {
+			break // §4.7: a cancelled run stops immediately
 		}
-		if s.lastFailed != nil {
+		res := s.RunNext(ctx, emit)
+		if res.Done || s.lastFailed != nil {
 			break // §4.7: stop at the first failure
 		}
 	}

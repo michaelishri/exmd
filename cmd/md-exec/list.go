@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/michaelishri/md-exec/internal/doc"
 )
@@ -31,16 +30,17 @@ func cmdList(args []string) int {
 		return 0
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tLANG\tKIND\tLINE\tSOURCE")
+	rows := make([][]string, 0, len(res.Doc.Blocks))
 	for _, b := range res.Doc.Blocks {
 		src := "(embedded)"
 		if b.Kind == doc.KindScript {
 			src = b.ScriptPath
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\n", b.Index, b.Lang, b.Kind, b.Line, src)
+		rows = append(rows, []string{
+			fmt.Sprint(b.Index), b.Lang, b.Kind.String(), fmt.Sprint(b.Line), src,
+		})
 	}
-	w.Flush()
+	printTable([]string{"ID", "LANG", "KIND", "LINE", "SOURCE"}, rows)
 
 	errs, warns := res.Counts()
 	printSummary(errs, warns)

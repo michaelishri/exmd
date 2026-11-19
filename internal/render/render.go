@@ -22,8 +22,7 @@ import (
 // HeadingMark is the rendered line at which a heading starts. Index i
 // corresponds to Document.Headings[i].
 type HeadingMark struct {
-	Line  int // 0-based rendered line index
-	Level int
+	Line int // 0-based rendered line index
 }
 
 // BlockMark is the rendered line at which an executable block's badge sits.
@@ -41,7 +40,6 @@ type Output struct {
 	Headings []HeadingMark
 	Blocks   []BlockMark
 	Width    int
-	Color    bool
 }
 
 type boundary struct {
@@ -50,12 +48,12 @@ type boundary struct {
 	block   int // index into d.Blocks, -1 otherwise
 }
 
-// Render renders d at the given width. width <= 0 falls back to 80.
-func Render(d *doc.Document, width int, color bool) (*Output, error) {
+// Render renders d at the given width. width <= 0 falls back to DefaultWidth.
+func Render(d *doc.Document, width int, color bool) *Output {
 	if width <= 0 {
-		width = 80
+		width = DefaultWidth
 	}
-	out := &Output{Width: width, Color: color}
+	out := &Output{Width: width}
 
 	bounds := boundaries(d)
 	srcLines := strings.Split(string(d.Source), "\n")
@@ -66,6 +64,14 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 		execStyle = execDarkStyle()
 	} else {
 		style = styles.ASCIIStyleConfig
+	}
+
+	// Build the renderers once: glamour's setup is expensive and the same
+	// two styles are used for every chunk in the document.
+	renderer := newRenderer(style, width)
+	execRenderer := renderer
+	if color {
+		execRenderer = newRenderer(execStyle, width)
 	}
 
 	for i, b := range bounds {
@@ -91,13 +97,13 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 
 		switch {
 		case b.heading >= 0:
-			out.Headings = append(out.Headings, HeadingMark{Line: len(out.Lines), Level: d.Headings[b.heading].Level})
-			out.appendGlamour(chunk, width, style)
+			out.Headings = append(out.Headings, HeadingMark{Line: len(out.Lines)})
+			out.appendGlamour(chunk, renderer)
 		case b.block >= 0:
 			blk := d.Blocks[b.block]
 			out.Blocks = append(out.Blocks, BlockMark{
 				Line:     len(out.Lines),
-				Label:    fmt.Sprintf("%s — line %d · %s", blk.Lang, blk.Line, blockSource(blk)),
+				Label:    blockLabel(blk),
 				BlockRef: blk,
 			})
 			out.appendBadge(blk, color)
@@ -105,7 +111,7 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			// only affects rendering, never execution (SPEC.md §9).
 			chunk = stripExecSuffix(chunk)
 			start := len(out.Lines)
-			out.appendGlamour(chunk, width, execStyle)
+			out.appendGlamour(chunk, execRenderer)
 			if color {
 				paintExecLines(out.Lines[start:], width)
 				// Glamour's code block has a blank row above its first code
@@ -116,14 +122,18 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 				out.Lines = append(out.Lines, "")
 			}
 		default:
-			out.appendGlamour(chunk, width, style)
+			out.appendGlamour(chunk, renderer)
 		}
 	}
 
-	// Each block's rendered extent ends where the next chunk starts: the
-	// next heading or block mark, minus the separator blank that precedes
-	// it. The final block also excludes the plain spacing row appended
-	// after its shaded surface, so the extent never covers that row.
+	computeBlockExtents(out, color)
+	return out
+}
+
+// computeBlockExtents records where each rendered block ends: at the next
+// heading or block mark minus its separator blank. The final block also
+// excludes the plain spacing row after its shaded surface.
+func computeBlockExtents(out *Output, color bool) {
 	marks := make([]int, 0, len(out.Headings)+len(out.Blocks))
 	for _, hm := range out.Headings {
 		marks = append(marks, hm.Line)
@@ -145,7 +155,12 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 		}
 		out.Blocks[i].End = end
 	}
-	return out, nil
+}
+
+// blockLabel is the single source of truth for an executable block's badge
+// text and its render mark label.
+func blockLabel(b *doc.Block) string {
+	return fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b))
 }
 
 // boundaries returns the chunk start lines: the first body line, then every

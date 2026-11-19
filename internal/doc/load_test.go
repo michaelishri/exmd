@@ -178,9 +178,6 @@ func TestResolveGlobals(t *testing.T) {
 		t.Fatalf("ENV override = %q", got["ENV"])
 	}
 	var errs []Diagnostic
-	present := d.GlobalsPresent(map[string]string{"ENV": "prod", "TYPO": "x"})
-	_ = present
-	diags = nil
 	_, diags = d.ResolveGlobals(map[string]string{"TYPO": "x"})
 	for _, dg := range diags {
 		if dg.Severity == SeverityError {

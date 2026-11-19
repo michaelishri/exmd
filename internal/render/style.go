@@ -8,13 +8,17 @@ import (
 	gansi "github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/md-exec/internal/theme"
 )
 
-// appendGlamour renders one Markdown chunk and appends its lines.
-func (o *Output) appendGlamour(chunk string, width int, style gansi.StyleConfig) {
+// DefaultWidth is the render width when none is supplied.
+const DefaultWidth = 80
+
+// newRenderer builds one glamour renderer, reused for every chunk of a style.
+func newRenderer(style gansi.StyleConfig, width int) *glamour.TermRenderer {
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),
@@ -23,6 +27,14 @@ func (o *Output) appendGlamour(chunk string, width int, style gansi.StyleConfig)
 		glamour.WithChromaFormatter("terminal16m"),
 	)
 	if err != nil {
+		return nil
+	}
+	return r
+}
+
+// appendGlamour renders one Markdown chunk and appends its lines.
+func (o *Output) appendGlamour(chunk string, r *glamour.TermRenderer) {
+	if r == nil {
 		o.appendPlain(chunk)
 		return
 	}
@@ -34,29 +46,29 @@ func (o *Output) appendGlamour(chunk string, width int, style gansi.StyleConfig)
 	o.appendTrimmed(rendered)
 }
 
+// trimEmptyLines drops empty leading and trailing lines.
+func trimEmptyLines(lines []string, empty func(string) bool) []string {
+	for len(lines) > 0 && empty(lines[0]) {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && empty(lines[len(lines)-1]) {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
 // appendTrimmed splits rendered output into lines, dropping visually empty
 // leading and trailing lines.
 func (o *Output) appendTrimmed(s string) {
-	lines := strings.Split(s, "\n")
-	for len(lines) > 0 && ansi.StringWidth(lines[0]) == 0 {
-		lines = lines[1:]
-	}
-	for len(lines) > 0 && ansi.StringWidth(lines[len(lines)-1]) == 0 {
-		lines = lines[:len(lines)-1]
-	}
-	o.Lines = append(o.Lines, lines...)
+	o.Lines = append(o.Lines, trimEmptyLines(strings.Split(s, "\n"),
+		func(l string) bool { return xansi.StringWidth(l) == 0 })...)
 }
 
 // appendPlain is the fallback when glamour cannot render a chunk: the raw
 // Markdown source, trimmed.
 func (o *Output) appendPlain(chunk string) {
-	lines := strings.Split(strings.TrimRight(chunk, "\n"), "\n")
-	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
-		lines = lines[1:]
-	}
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
+	lines := trimEmptyLines(strings.Split(strings.TrimRight(chunk, "\n"), "\n"),
+		func(l string) bool { return strings.TrimSpace(l) == "" })
 	o.Lines = append(o.Lines, lines...)
 }
 
@@ -65,7 +77,7 @@ func (o *Output) appendPlain(chunk string) {
 // sits on the page background like ordinary prose; only the code block
 // itself carries the executable surface color.
 func (o *Output) appendBadge(b *doc.Block, color bool) {
-	label := fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b))
+	label := blockLabel(b)
 	var line string
 	if !color {
 		line = "  ▸ " + label
@@ -74,7 +86,7 @@ func (o *Output) appendBadge(b *doc.Block, color bool) {
 		muted := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 		line = "  " + accent.Render("▸") + " " + muted.Render(label)
 	}
-	o.Lines = append(o.Lines, ansi.Truncate(line, max(1, o.Width), "…"))
+	o.Lines = append(o.Lines, xansi.Truncate(line, max(1, o.Width), "…"))
 }
 
 // darkStyle derives the content style from glamour's dark theme: clean
@@ -83,12 +95,12 @@ func (o *Output) appendBadge(b *doc.Block, color bool) {
 func darkStyle() gansi.StyleConfig {
 	c := styles.DarkStyleConfig
 
-	text := "#e4e4e9"
-	bright := "#f4f4f8"
-	soft := "#c8c8d0"
-	muted := "#8a8a95"
-	accent := "#8f8af4"
-	panel := "#1a1a21"
+	text := string(theme.Palette.Text)
+	bright := string(theme.Palette.Bright)
+	soft := string(theme.Palette.Soft)
+	muted := string(theme.Palette.Muted)
+	accent := string(theme.Palette.Accent)
+	panel := string(theme.Palette.Panel)
 
 	c.Document.StylePrimitive.Color = strPtr(text)
 
@@ -117,7 +129,7 @@ func darkStyle() gansi.StyleConfig {
 	c.Link.Color = strPtr(accent)
 	c.LinkText.Color = strPtr(accent)
 	c.BlockQuote.StylePrimitive.Color = strPtr(muted)
-	c.HorizontalRule.Color = strPtr("#3a3a44")
+	c.HorizontalRule.Color = strPtr(string(theme.Palette.Rule))
 
 	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(panel)
 	c.Code.StylePrimitive.BackgroundColor = strPtr(panel)
@@ -156,10 +168,10 @@ func paintExecLines(lines []string, width int) {
 		// Leave the first column on the page background: the shaded
 		// surface starts one column in. Consume one of the code block's
 		// indenting spaces so the code text itself does not shift.
-		body := ansi.Cut(line, 1, ansi.StringWidth(line))
-		body = ansi.Truncate(body, width-1, "")
+		body := xansi.Cut(line, 1, xansi.StringWidth(line))
+		body = xansi.Truncate(body, width-1, "")
 		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m"+execPanelEscape)
-		if visible := ansi.StringWidth(body); visible < width-1 {
+		if visible := xansi.StringWidth(body); visible < width-1 {
 			body += execPanelEscape + strings.Repeat(" ", width-1-visible)
 		}
 		lines[i] = " " + execPanelEscape + body + "\x1b[0m"
@@ -172,4 +184,3 @@ func ExecColor() string { return execPanel }
 
 func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool    { return &b }
-func uintPtr(u uint) *uint    { return &u }

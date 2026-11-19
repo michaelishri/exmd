@@ -1,36 +1,40 @@
 package doc
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestParseFenceInfo(t *testing.T) {
 	tests := []struct {
-		info    string
-		lang    string
-		matched bool
-		nAttrs  int
+		info      string
+		lang      string
+		matched   bool
+		wantAttrs []BlockAttribute
 	}{
-		{"bash:exec", "bash", true, 0},
-		{"python3:exec", "python3", true, 0},
-		{"python:exec", "python", true, 0},
-		{"bash:exec ", "bash", true, 0},
-		{" bash:exec", "bash", true, 0},
-		{"bash:exec name=deploy", "bash", true, 1},
-		{"bash:exec a=1 b=2", "bash", true, 2},
-		{"node-js:exec", "node-js", true, 0},
-		{"bash", "", false, 0},
-		{"exec", "", false, 0},
-		{":exec", "", false, 0},
-		{"bash:execute", "", false, 0},
-		{"bash: exec", "", false, 0},
-		{"bash :", "", false, 0},
-		{"9lang:exec", "", false, 0},
-		{"", "", false, 0},
+		{"bash:exec", "bash", true, nil},
+		{"python3:exec", "python3", true, nil},
+		{"python:exec", "python", true, nil},
+		{"bash:exec ", "bash", true, nil},
+		{" bash:exec", "bash", true, nil},
+		{"bash:exec name=deploy", "bash", true, []BlockAttribute{{Key: "name", Value: "deploy"}}},
+		{"bash:exec a=1 b=2", "bash", true, []BlockAttribute{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}}},
+		{"bash:exec loose", "bash", true, []BlockAttribute{{Key: "loose", Malformed: true}}},
+		{"node-js:exec", "node-js", true, nil},
+		{"bash", "", false, nil},
+		{"exec", "", false, nil},
+		{":exec", "", false, nil},
+		{"bash:execute", "", false, nil},
+		{"bash: exec", "", false, nil},
+		{"bash :", "", false, nil},
+		{"9lang:exec", "", false, nil},
+		{"", "", false, nil},
 	}
 	for _, tt := range tests {
 		lang, attrs, matched := parseFenceInfo(tt.info)
-		if matched != tt.matched || lang != tt.lang || len(attrs) != tt.nAttrs {
-			t.Errorf("parseFenceInfo(%q) = (%q, %d attrs, %v), want (%q, %d attrs, %v)",
-				tt.info, lang, len(attrs), matched, tt.lang, tt.nAttrs, tt.matched)
+		if matched != tt.matched || lang != tt.lang || !reflect.DeepEqual(attrs, tt.wantAttrs) {
+			t.Errorf("parseFenceInfo(%q) = (%q, %v, %v), want (%q, %v, %v)",
+				tt.info, lang, attrs, matched, tt.lang, tt.wantAttrs, tt.matched)
 		}
 	}
 }

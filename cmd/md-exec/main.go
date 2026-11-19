@@ -4,9 +4,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelishri/md-exec/internal/doc"
@@ -36,12 +38,15 @@ otherwise; dark and notty force their palette.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
+// errHelp marks a -h/--help request so every verb can answer it the same
+// way: usage on stdout, exit 0.
+var errHelp = errors.New("help")
+
 // OpenCode-adjacent minimal styling: color only where it carries meaning.
 var (
-	styleErr    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	styleWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	styleDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	styleAccent = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	styleErr  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	styleDim  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
 func main() {
@@ -53,26 +58,52 @@ func colorSupported() bool {
 	return lipgloss.ColorProfile() != termenv.Ascii
 }
 
-// parseTheme extracts --theme NAME (or --theme=NAME, single or double dash)
-// from args in any position and returns the remaining args. A repeated flag
-// wins. The empty result means "auto".
-func parseTheme(args []string) (name string, rest []string, err error) {
+// parseFlag extracts every occurrence of a flag in any position, accepting
+// --name VALUE, --name=VALUE and their single-dash forms. Repeated flags
+// append to values; callers decide which one wins.
+func parseFlag(args []string, long, short string) (values, rest []string, err error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "--theme" || a == "-theme":
+		case a == "--"+long || a == "-"+short:
 			if i+1 >= len(args) {
-				return "", nil, fmt.Errorf("--theme requires a value (auto, dark, notty)")
+				return nil, nil, fmt.Errorf("--%s requires a value", long)
 			}
 			i++
-			name = args[i]
-		case strings.HasPrefix(a, "--theme="):
-			name = strings.TrimPrefix(a, "--theme=")
-		case strings.HasPrefix(a, "-theme="):
-			name = strings.TrimPrefix(a, "-theme=")
+			values = append(values, args[i])
+		case strings.HasPrefix(a, "--"+long+"="):
+			values = append(values, strings.TrimPrefix(a, "--"+long+"="))
+		case strings.HasPrefix(a, "-"+short+"="):
+			values = append(values, strings.TrimPrefix(a, "-"+short+"="))
 		default:
 			rest = append(rest, a)
 		}
+	}
+	return values, rest, nil
+}
+
+// extractHelp removes -h/--help from args and reports whether it was present.
+func extractHelp(args []string) (rest []string, help bool) {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			help = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return rest, help
+}
+
+// parseTheme extracts --theme NAME from args in any position. A repeated
+// flag wins; the empty result means "auto".
+func parseTheme(args []string) (string, []string, error) {
+	values, rest, err := parseFlag(args, "theme", "theme")
+	if err != nil {
+		return "", nil, err
+	}
+	name := ""
+	if len(values) > 0 {
+		name = values[len(values)-1]
 	}
 	return name, rest, nil
 }
@@ -96,8 +127,6 @@ func run(args []string) int {
 		return cmdGlobals(args[1:])
 	case "print":
 		return cmdPrint(args[1:])
-	case "tui":
-		return cmdTUI(args[1:])
 	case "--help", "-h", "help":
 		fmt.Println(usage)
 		return 0
@@ -129,22 +158,29 @@ func loadDoc(path string) (*doc.Result, int) {
 //
 //	path:line: error: block N: message
 func printDiagnostics(res *doc.Result) {
-	path := res.Doc.Path
+	path := styleDim.Render(res.Doc.Path)
 	for _, d := range res.Diagnostics {
 		sev := styleErr.Render("error")
 		if d.Severity == doc.SeverityWarning {
 			sev = styleWarn.Render("warning")
 		}
-		msg := d.Message
-		if d.Block > 0 {
-			msg = fmt.Sprintf("block %d: %s", d.Block, msg)
-		}
+		msg := d.Detail()
 		if d.Line > 0 {
-			fmt.Printf("%s:%d: %s: %s\n", styleDim.Render(path), d.Line, sev, msg)
+			fmt.Printf("%s:%d: %s: %s\n", path, d.Line, sev, msg)
 		} else {
-			fmt.Printf("%s: %s: %s\n", styleDim.Render(path), sev, msg)
+			fmt.Printf("%s: %s: %s\n", path, sev, msg)
 		}
 	}
+}
+
+// printTable prints tab-aligned rows with a header.
+func printTable(headers []string, rows [][]string) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	for _, row := range rows {
+		fmt.Fprintln(w, strings.Join(row, "\t"))
+	}
+	w.Flush()
 }
 
 func printSummary(errs, warns int) {

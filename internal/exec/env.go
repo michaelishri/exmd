@@ -14,6 +14,16 @@ var shellManaged = map[string]struct{}{
 	"_": {}, "OLDPWD": {}, "PWD": {}, "SHLVL": {},
 }
 
+// sortedKeys returns a map's keys in a stable order.
+func sortedKeys[V any](m map[string]V) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // compose builds a block's process environment (SPEC.md §4.2):
 //
 //	block_env := (host_env − declared_names) ∪ current_globals
@@ -34,12 +44,7 @@ func compose(hostEnv []string, declared map[string]struct{}, globals map[string]
 		seen[name] = struct{}{}
 		out = append(out, kv)
 	}
-	names := make([]string, 0, len(globals))
-	for name := range globals {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range sortedKeys(globals) {
 		out = append(out, name+"="+globals[name])
 	}
 	return out

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -259,9 +261,9 @@ func TestCancelInterruptsBlock(t *testing.T) {
 	}
 }
 
-// TestRunBlockIsolation checks RunBlock: the block at the given index runs
-// in isolation on the launch-time state, the harvest applies to it, and the
-// session continues after that block.
+// TestRunBlockAt checks RunBlock: the block at the given index runs on the
+// session's current state, the harvest applies to it, and the session
+// continues after that block.
 func TestRunBlockIsolation(t *testing.T) {
 	res, err := doc.Load(filepath.Join("testdata", "flow.md"))
 	if err != nil {
@@ -273,8 +275,8 @@ func TestRunBlockIsolation(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Block 2 depends on the global block 1 exports — running it in
-	// isolation means that global is absent (the launch-time state).
+	// Block 2 depends on the global block 1 exports — on a fresh session
+	// that global is still absent.
 	var events []Event
 	emit := func(ev Event) { events = append(events, ev) }
 
@@ -302,6 +304,73 @@ func TestRunBlockIsolation(t *testing.T) {
 	}
 	if starts != 1 || ends != 1 {
 		t.Fatalf("events: %d starts, %d ends (want 1/1)", starts, ends)
+	}
+}
+
+// TestCancelledBlockExitingZeroStopsRun covers a block that traps SIGTERM
+// and exits 0: cancellation must still stop the run (SPEC.md §4.7).
+func TestCancelledBlockExitingZeroStopsRun(t *testing.T) {
+	d := &doc.Document{
+		Dir:     t.TempDir(),
+		Globals: map[string]*string{},
+		Blocks: []*doc.Block{
+			{Index: 1, Lang: "bash", Body: "trap 'exit 0' TERM\nsleep 5\n"},
+			{Index: 2, Lang: "bash", Body: "echo second-block-ran\n"},
+		},
+	}
+	s, err := NewSession(d, Options{Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	timer := time.AfterFunc(150*time.Millisecond, cancel)
+	defer timer.Stop()
+
+	var starts int
+	s.RunNext(ctx, func(ev Event) {
+		if ev.Kind == EventBlockStart {
+			starts++
+		}
+	})
+	if starts != 1 {
+		t.Fatalf("block starts = %d, want 1 (run continued after cancellation)", starts)
+	}
+	res := s.Result()
+	if !res.Interrupted || res.Failed == nil {
+		t.Fatalf("result = %+v, want an interrupted run with a failed block", res)
+	}
+}
+
+// TestEventsSerialized checks that stdout and stderr never invoke the event
+// callback at the same time.
+func TestEventsSerialized(t *testing.T) {
+	d := &doc.Document{
+		Dir:     t.TempDir(),
+		Globals: map[string]*string{},
+		Blocks: []*doc.Block{
+			{Index: 1, Lang: "bash", Body: "for i in $(seq 1 100); do echo out$i; echo err$i >&2; done\n"},
+		},
+	}
+	var active atomic.Int32
+	var overlapped atomic.Bool
+	_, err := Run(context.Background(), d, Options{
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+		Events: func(Event) {
+			if active.Add(1) > 1 {
+				overlapped.Store(true)
+			}
+			time.Sleep(10 * time.Microsecond)
+			active.Add(-1)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overlapped.Load() {
+		t.Fatal("event callbacks overlapped")
 	}
 }
 

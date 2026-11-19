@@ -23,7 +23,7 @@ func Load(path string) (*Result, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf")) // UTF-8 BOM
-	src = []byte(normalizeNewlines(string(src)))
+	src = normalizeNewlines(src)
 
 	dir := filepath.Dir(path)
 	if abs, absErr := filepath.Abs(path); absErr == nil {
@@ -31,11 +31,10 @@ func Load(path string) (*Result, error) {
 	}
 
 	d := &Document{
-		Path:        path,
-		Dir:         dir,
-		SpecVersion: 1,
-		Globals:     map[string]*string{},
-		Source:      src,
+		Path:    path,
+		Dir:     dir,
+		Globals: map[string]*string{},
+		Source:  src,
 	}
 	res := &Result{Doc: d}
 
@@ -44,19 +43,12 @@ func Load(path string) (*Result, error) {
 	switch {
 	case openLine == 0:
 		// No frontmatter: the document cannot be a runbook (SPEC.md §2.1).
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Message:  "not a runbook: frontmatter is missing (expected `---`, `type: runbook`, `---` at the top of the file)",
-		})
+		res.add(newDiag(SeverityError, 0, "not a runbook: frontmatter is missing (expected `---`, `type: runbook`, `---` at the top of the file)"))
 	case !closed:
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     openLine,
-			Message:  "frontmatter is not closed (expected a closing `---` line)",
-		})
+		res.add(newDiag(SeverityError, openLine, "frontmatter is not closed (expected a closing `---` line)"))
 	default:
 		if parseFrontmatter(yamlSrc, openLine, d, res) && d.IsRunbook {
-			collect(masked, d, res)
+			collect(masked, indexLines(src), d, res)
 		}
 	}
 	return res, nil
@@ -65,7 +57,7 @@ func Load(path string) (*Result, error) {
 // collect walks the Markdown AST and gathers headings plus — for runbooks —
 // executable blocks, in document order (SPEC.md §3.1: blocks inside list
 // items still execute in document order).
-func collect(src []byte, d *Document, res *Result) {
+func collect(src []byte, starts []int, d *Document, res *Result) {
 	parsed := goldmark.New().Parser().Parse(text.NewReader(src))
 
 	type entry struct {
@@ -80,11 +72,11 @@ func collect(src []byte, d *Document, res *Result) {
 		}
 		switch t := n.(type) {
 		case *ast.Heading:
-			if h := collectHeading(t, src); h != nil {
+			if h := collectHeading(t, src, starts); h != nil {
 				d.Headings = append(d.Headings, h)
 			}
 		case *ast.FencedCodeBlock:
-			if b, diags := collectBlock(t, src, d.Dir); b != nil {
+			if b, diags := collectBlock(t, src, starts, d.Dir); b != nil {
 				entries = append(entries, entry{b: b, diags: diags})
 			}
 		}
@@ -101,7 +93,7 @@ func collect(src []byte, d *Document, res *Result) {
 	}
 }
 
-func collectHeading(h *ast.Heading, src []byte) *Heading {
+func collectHeading(h *ast.Heading, src []byte, starts []int) *Heading {
 	segs := h.Lines()
 	hd := &Heading{Level: h.Level}
 	if segs.Len() == 0 {
@@ -113,6 +105,6 @@ func collectHeading(h *ast.Heading, src []byte) *Heading {
 		sb.Write(seg.Value(src))
 	}
 	hd.Text = strings.Join(strings.Fields(sb.String()), " ")
-	hd.Line = lineOf(src, segs.At(0).Start)
+	hd.Line = lineOf(starts, segs.At(0).Start)
 	return hd
 }

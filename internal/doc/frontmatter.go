@@ -22,7 +22,7 @@ var globalNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // positions that are valid for the original.
 func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, bodyLine int, masked []byte) {
 	first, rest, hasNL := bytes.Cut(src, []byte("\n"))
-	if strings.TrimRight(string(first), " \t\r") != "---" {
+	if string(bytes.TrimRight(first, " \t\r")) != "---" {
 		return nil, 0, false, 1, src
 	}
 	openLine = 1
@@ -43,7 +43,7 @@ func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, bo
 		} else {
 			line = rest[pos : pos+eol]
 		}
-		if strings.TrimRight(string(line), " \t\r") == "---" {
+		if string(bytes.TrimRight(line, " \t\r")) == "---" {
 			closeStart := offset + pos
 			yamlSrc = src[offset:closeStart]
 			for i := offset; i < closeStart; i++ {
@@ -67,11 +67,7 @@ func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, bo
 func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (trusted bool) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(yamlSrc, &root); err != nil {
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     adjustYamlLine(err.Error(), openLine),
-			Message:  "invalid frontmatter YAML: " + strings.TrimPrefix(err.Error(), "yaml: "),
-		})
+		res.add(newDiag(SeverityError, adjustYamlLine(err.Error(), openLine), "invalid frontmatter YAML: "+strings.TrimPrefix(err.Error(), "yaml: ")))
 		return false
 	}
 	if root.Kind == yaml.DocumentNode {
@@ -84,11 +80,7 @@ func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (t
 		return true
 	}
 	if root.Kind != yaml.MappingNode {
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     nodeLine(&root, openLine),
-			Message:  "frontmatter must be a YAML mapping",
-		})
+		res.add(newDiag(SeverityError, nodeLine(&root, openLine), "frontmatter must be a YAML mapping"))
 		return false
 	}
 
@@ -99,17 +91,8 @@ func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (t
 		case "type":
 			parseType(val, d, res, openLine)
 		case "title":
-			switch {
-			case val.Kind == yaml.ScalarNode && val.Tag == "!!null":
-				// absent
-			case val.Kind != yaml.ScalarNode:
-				res.Diagnostics = append(res.Diagnostics, Diagnostic{
-					Severity: SeverityError,
-					Line:     nodeLine(val, openLine),
-					Message:  "frontmatter `title` must be a string",
-				})
-			default:
-				d.Title = val.Value
+			if value, ok := scalarValue(val, "title", openLine, res); ok {
+				d.Title = value
 			}
 		case "spec":
 			parseSpec(val, d, res, openLine)
@@ -120,11 +103,7 @@ func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (t
 		}
 	}
 	if len(unknown) > 0 {
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityWarning,
-			Line:     nodeLine(&root, openLine),
-			Message:  fmt.Sprintf("unknown frontmatter key(s): %s (ignored)", strings.Join(unknown, ", ")),
-		})
+		res.add(newDiag(SeverityWarning, nodeLine(&root, openLine), fmt.Sprintf("unknown frontmatter key(s): %s (ignored)", strings.Join(unknown, ", "))))
 	}
 
 	d.IsRunbook = d.TypeValue == "runbook"
@@ -133,28 +112,29 @@ func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (t
 		if d.TypeValue != "" {
 			msg = fmt.Sprintf("not a runbook: `type` is `%s`, expected `runbook`", d.TypeValue)
 		}
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     openLine,
-			Message:  msg,
-		})
+		res.add(newDiag(SeverityError, openLine, msg))
 	}
 	return true
 }
 
-func parseType(val *yaml.Node, d *Document, res *Result, openLine int) {
+// scalarValue reads a string frontmatter value. It reports an error for a
+// non-scalar node and returns false for a null node.
+func scalarValue(val *yaml.Node, name string, openLine int, res *Result) (string, bool) {
 	if val.Kind == yaml.ScalarNode && val.Tag == "!!null" {
-		return
+		return "", false
 	}
 	if val.Kind != yaml.ScalarNode {
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     nodeLine(val, openLine),
-			Message:  "frontmatter `type` must be a string",
-		})
-		return
+		res.add(newDiag(SeverityError, nodeLine(val, openLine),
+			fmt.Sprintf("frontmatter `%s` must be a string", name)))
+		return "", false
 	}
-	d.TypeValue = val.Value
+	return val.Value, true
+}
+
+func parseType(val *yaml.Node, d *Document, res *Result, openLine int) {
+	if value, ok := scalarValue(val, "type", openLine, res); ok {
+		d.TypeValue = value
+	}
 }
 
 func parseSpec(val *yaml.Node, d *Document, res *Result, openLine int) {
@@ -163,29 +143,16 @@ func parseSpec(val *yaml.Node, d *Document, res *Result, openLine int) {
 	case val.Kind == yaml.ScalarNode && val.Tag == "!!null":
 		return
 	case val.Kind != yaml.ScalarNode:
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     nodeLine(val, openLine),
-			Message:  invalid,
-		})
+		res.add(newDiag(SeverityError, nodeLine(val, openLine), invalid))
 		return
 	default:
 		var v int
 		if err := val.Decode(&v); err != nil {
-			res.Diagnostics = append(res.Diagnostics, Diagnostic{
-				Severity: SeverityError,
-				Line:     nodeLine(val, openLine),
-				Message:  invalid,
-			})
+			res.add(newDiag(SeverityError, nodeLine(val, openLine), invalid))
 			return
 		}
-		d.SpecVersion = v
 		if v != 1 {
-			res.Diagnostics = append(res.Diagnostics, Diagnostic{
-				Severity: SeverityError,
-				Line:     nodeLine(val, openLine),
-				Message:  fmt.Sprintf("unsupported spec version %d (this runner implements version 1)", v),
-			})
+			res.add(newDiag(SeverityError, nodeLine(val, openLine), fmt.Sprintf("unsupported spec version %d (this runner implements version 1)", v)))
 		}
 	}
 }
@@ -198,11 +165,7 @@ func parseGlobals(val *yaml.Node, d *Document, res *Result, openLine int) {
 	case val.Kind == yaml.ScalarNode && val.Tag == "!!null":
 		return
 	case val.Kind != yaml.MappingNode:
-		res.Diagnostics = append(res.Diagnostics, Diagnostic{
-			Severity: SeverityError,
-			Line:     nodeLine(val, openLine),
-			Message:  "`globals` must be a mapping (block or flow style); for a one-line list use the flow form, e.g. globals: {JOB_ID, AUTHOR: \"Michael\"}",
-		})
+		res.add(newDiag(SeverityError, nodeLine(val, openLine), "`globals` must be a mapping (block or flow style); for a one-line list use the flow form, e.g. globals: {JOB_ID, AUTHOR: \"Michael\"}"))
 		return
 	}
 
@@ -211,29 +174,17 @@ func parseGlobals(val *yaml.Node, d *Document, res *Result, openLine int) {
 		key, v := val.Content[i], val.Content[i+1]
 		name := key.Value
 		if !globalNameRE.MatchString(name) {
-			res.Diagnostics = append(res.Diagnostics, Diagnostic{
-				Severity: SeverityError,
-				Line:     nodeLine(key, openLine),
-				Message:  fmt.Sprintf("invalid global name `%s` (must match [A-Za-z_][A-Za-z0-9_]*)", name),
-			})
+			res.add(newDiag(SeverityError, nodeLine(key, openLine), fmt.Sprintf("invalid global name `%s` (must match [A-Za-z_][A-Za-z0-9_]*)", name)))
 			continue
 		}
 		if line, dup := seen[name]; dup {
-			res.Diagnostics = append(res.Diagnostics, Diagnostic{
-				Severity: SeverityError,
-				Line:     nodeLine(key, openLine),
-				Message:  fmt.Sprintf("duplicate global `%s` (first declared at line %d)", name, line),
-			})
+			res.add(newDiag(SeverityError, nodeLine(key, openLine), fmt.Sprintf("duplicate global `%s` (first declared at line %d)", name, line)))
 			continue
 		}
 		seen[name] = nodeLine(key, openLine)
 
 		if v.Kind != yaml.ScalarNode {
-			res.Diagnostics = append(res.Diagnostics, Diagnostic{
-				Severity: SeverityError,
-				Line:     nodeLine(v, openLine),
-				Message:  fmt.Sprintf("`globals` value for `%s` must be a scalar", name),
-			})
+			res.add(newDiag(SeverityError, nodeLine(v, openLine), fmt.Sprintf("`globals` value for `%s` must be a scalar", name)))
 			continue
 		}
 		if v.Tag == "!!null" {

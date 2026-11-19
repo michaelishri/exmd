@@ -1,27 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 )
 
 type kv struct{ key, val string }
 
 type setList []kv
-
-func (s *setList) String() string {
-	var sb strings.Builder
-	for i, e := range *s {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		fmt.Fprintf(&sb, "%s=%s", e.key, e.val)
-	}
-	return sb.String()
-}
 
 func (s *setList) Set(v string) error {
 	key, val, found := strings.Cut(v, "=")
@@ -32,34 +21,32 @@ func (s *setList) Set(v string) error {
 	return nil
 }
 
-// parseSetArgs accepts flags in any position relative to the document:
+// toMap turns parsed overrides into the map the document API expects.
+func (s setList) toMap() map[string]string {
+	out := make(map[string]string, len(s))
+	for _, e := range s {
+		out[e.key] = e.val
+	}
+	return out
+}
+
+// parseSetArgs accepts --set in any position relative to the document:
 //
 //	md-exec globals DOC --set KEY=VALUE
 //	md-exec globals --set KEY=VALUE DOC --set KEY2=VALUE2
-func parseSetArgs(args []string) (sets setList, positional []string, err error) {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--set" || a == "-set":
-			if i+1 >= len(args) {
-				return nil, nil, fmt.Errorf("--set requires a KEY=VALUE value")
-			}
-			i++
-			if err := sets.Set(args[i]); err != nil {
-				return nil, nil, err
-			}
-		case strings.HasPrefix(a, "--set="):
-			if err := sets.Set(strings.TrimPrefix(a, "--set=")); err != nil {
-				return nil, nil, err
-			}
-		case strings.HasPrefix(a, "-set="):
-			if err := sets.Set(strings.TrimPrefix(a, "-set=")); err != nil {
-				return nil, nil, err
-			}
-		case a == "-h" || a == "--help":
-			return nil, nil, fmt.Errorf("%s", "help")
-		default:
-			positional = append(positional, a)
+func parseSetArgs(args []string) (setList, []string, error) {
+	args, help := extractHelp(args)
+	if help {
+		return nil, nil, errHelp
+	}
+	values, positional, err := parseFlag(args, "set", "set")
+	if err != nil {
+		return nil, nil, err
+	}
+	var sets setList
+	for _, v := range values {
+		if err := sets.Set(v); err != nil {
+			return nil, nil, err
 		}
 	}
 	return sets, positional, nil
@@ -70,11 +57,11 @@ func parseSetArgs(args []string) (sets setList, positional []string, err error) 
 // versus absent.
 func cmdGlobals(args []string) int {
 	sets, positional, err := parseSetArgs(args)
+	if errors.Is(err, errHelp) {
+		fmt.Println("usage: md-exec globals DOC [--set KEY=VALUE]...")
+		return 0
+	}
 	if err != nil {
-		if err.Error() == "help" {
-			fmt.Println("usage: md-exec globals DOC [--set KEY=VALUE]...")
-			return 0
-		}
 		fmt.Fprintf(os.Stderr, "md-exec globals: %v\n", err)
 		return 2
 	}
@@ -88,10 +75,7 @@ func cmdGlobals(args []string) int {
 		return code
 	}
 
-	overrides := map[string]string{}
-	for _, s := range sets {
-		overrides[s.key] = s.val
-	}
+	overrides := sets.toMap()
 	_, diags := res.Doc.ResolveGlobals(overrides)
 	res.Diagnostics = append(res.Diagnostics, diags...)
 	res.Sort()
@@ -106,8 +90,7 @@ func cmdGlobals(args []string) int {
 	}
 	sort.Strings(names)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSOURCE\tVALUE")
+	rows := make([][]string, 0, len(names))
 	for _, name := range names {
 		src, val := "absent", "—"
 		if ov, ok := overrides[name]; ok {
@@ -118,9 +101,9 @@ func cmdGlobals(args []string) int {
 		if val == "—" {
 			val = styleDim.Render("—")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", name, src, val)
+		rows = append(rows, []string{name, src, val})
 	}
-	w.Flush()
+	printTable([]string{"NAME", "SOURCE", "VALUE"}, rows)
 
 	fmt.Println(styleDim.Render(fmt.Sprintf("%d declared global(s); absent ones start unset until overridden or exported by a block (SPEC.md §2.2)", len(names))))
 	return 0

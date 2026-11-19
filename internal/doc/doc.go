@@ -37,14 +37,6 @@ type Block struct {
 	ScriptAbs  string // ScriptPath resolved against the document directory
 	Line       int    // 1-based line of the fence info string
 	BodyLine   int    // 1-based line of the first body line
-	BodyLines  int    // number of body lines in the source (0 for empty blocks)
-
-	Attributes []BlockAttribute
-}
-
-// ClosingLine returns the 1-based source line of the block's closing fence.
-func (b *Block) ClosingLine() int {
-	return b.BodyLine + b.BodyLines
 }
 
 // Heading is a Markdown heading, used for the document outline.
@@ -56,12 +48,11 @@ type Heading struct {
 
 // Document is a parsed, validated document (SPEC.md §2).
 type Document struct {
-	Path        string
-	Dir         string
-	Title       string
-	SpecVersion int // defaults to 1
-	IsRunbook   bool
-	TypeValue   string // `type` exactly as written ("" when absent)
+	Path      string
+	Dir       string
+	Title     string
+	IsRunbook bool
+	TypeValue string // `type` exactly as written ("" when absent)
 
 	// Source is the BOM-stripped, newline-normalized source text; line
 	// numbers are unchanged. BodyLine is the 1-based first line after the
@@ -90,20 +81,4 @@ func (d *Document) HeadingText() string {
 		return d.Title
 	}
 	return filepath.Base(d.Path)
-}
-
-// GlobalsPresent reports which declared globals start present (defaults plus
-// overrides) versus absent (SPEC.md §2.2). Absent names are omitted.
-func (d *Document) GlobalsPresent(overrides map[string]string) map[string]string {
-	present := make(map[string]string, len(d.Globals))
-	for name, def := range d.Globals {
-		if ov, ok := overrides[name]; ok {
-			present[name] = ov
-			continue
-		}
-		if def != nil {
-			present[name] = *def
-		}
-	}
-	return present
 }

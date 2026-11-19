@@ -9,6 +9,8 @@
 package exec
 
 import (
+	"fmt"
+
 	"github.com/michaelishri/md-exec/internal/doc"
 )
 
@@ -21,13 +23,6 @@ const (
 	// StreamStderr is the block's standard error.
 	StreamStderr
 )
-
-func (s Stream) String() string {
-	if s == StreamStderr {
-		return "stderr"
-	}
-	return "stdout"
-}
 
 // EventKind classifies engine events.
 type EventKind int
@@ -57,8 +52,12 @@ func (k EventKind) String() string {
 		return "output"
 	case EventBlockEnd:
 		return "end"
-	default:
+	case EventWarning:
 		return "warning"
+	case EventGlobals:
+		return "globals"
+	default:
+		return fmt.Sprintf("EventKind(%d)", k)
 	}
 }
 

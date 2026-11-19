@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/yuin/goldmark/ast"
@@ -49,7 +50,7 @@ func parseFenceInfo(info string) (lang string, attrs []BlockAttribute, matched b
 
 // collectBlock turns a fenced code block into a *Block, or nil when the
 // fence is display-only (SPEC.md §3.3).
-func collectBlock(b *ast.FencedCodeBlock, src []byte, docdir string) (*Block, []Diagnostic) {
+func collectBlock(b *ast.FencedCodeBlock, src []byte, starts []int, docdir string) (*Block, []Diagnostic) {
 	if b.Info == nil {
 		return nil, nil
 	}
@@ -60,29 +61,12 @@ func collectBlock(b *ast.FencedCodeBlock, src []byte, docdir string) (*Block, []
 	}
 
 	blk := &Block{
-		Lang:       lang,
-		Attributes: attrs,
-		Line:       lineOf(src, b.Info.Segment.Start),
+		Lang: lang,
+		Line: lineOf(starts, b.Info.Segment.Start),
 	}
-	diags := make([]Diagnostic, 0, 1)
-	for _, a := range attrs {
-		if a.Malformed {
-			diags = append(diags, Diagnostic{
-				Severity: SeverityError,
-				Line:     blk.Line,
-				Message:  fmt.Sprintf("malformed block attribute `%s` (expected key=value)", a.Key),
-			})
-		} else {
-			diags = append(diags, Diagnostic{
-				Severity: SeverityError,
-				Line:     blk.Line,
-				Message:  fmt.Sprintf("unknown block attribute `%s` (v1 defines none; reserved)", a.Key),
-			})
-		}
-	}
+	diags := attributeDiags(attrs, blk.Line)
 
 	segs := b.Lines()
-	blk.BodyLines = segs.Len()
 	blk.BodyLine = blk.Line + 1
 
 	var body strings.Builder
@@ -90,39 +74,54 @@ func collectBlock(b *ast.FencedCodeBlock, src []byte, docdir string) (*Block, []
 		seg := segs.At(i)
 		body.Write(seg.Value(src))
 	}
-	bodyStr := strings.TrimRight(normalizeNewlines(body.String()), "\n")
+	bodyStr := strings.TrimRight(body.String(), "\n")
 
 	if strings.TrimSpace(bodyStr) == "" {
-		diags = append(diags, Diagnostic{
-			Severity: SeverityError,
-			Line:     blk.Line,
-			Message:  "empty executable block",
-		})
+		diags = append(diags, newDiag(SeverityError, blk.Line, "empty executable block"))
 		return blk, diags
 	}
 
-	lines := strings.Split(bodyStr, "\n")
-	if len(lines) == 1 {
-		trimmed := strings.TrimSpace(lines[0])
-		if strings.HasPrefix(trimmed, "@") {
-			p := strings.TrimSpace(strings.TrimPrefix(trimmed, "@"))
-			if p == "" {
-				diags = append(diags, Diagnostic{
-					Severity: SeverityError,
-					Line:     blk.BodyLine,
-					Message:  "empty script path",
-				})
-			} else {
-				blk.Kind = KindScript
-				blk.ScriptPath = p
-				blk.ScriptAbs = resolvePath(docdir, p)
-			}
-			return blk, diags
+	if p, ok := scriptRef(bodyStr); ok {
+		if p == "" {
+			diags = append(diags, newDiag(SeverityError, blk.BodyLine, "empty script path"))
+		} else {
+			blk.Kind = KindScript
+			blk.ScriptPath = p
+			blk.ScriptAbs = resolvePath(docdir, p)
 		}
+		return blk, diags
 	}
 
 	blk.Body = bodyStr
 	return blk, diags
+}
+
+// attributeDiags reports v1's reserved block attributes (SPEC.md §3.1).
+func attributeDiags(attrs []BlockAttribute, line int) []Diagnostic {
+	diags := make([]Diagnostic, 0, len(attrs))
+	for _, a := range attrs {
+		if a.Malformed {
+			diags = append(diags, newDiag(SeverityError, line,
+				fmt.Sprintf("malformed block attribute `%s` (expected key=value)", a.Key)))
+			continue
+		}
+		diags = append(diags, newDiag(SeverityError, line,
+			fmt.Sprintf("unknown block attribute `%s` (v1 defines none; reserved)", a.Key)))
+	}
+	return diags
+}
+
+// scriptRef reports the path when the body is a single @script line.
+func scriptRef(body string) (string, bool) {
+	lines := strings.Split(body, "\n")
+	if len(lines) != 1 {
+		return "", false
+	}
+	trimmed := strings.TrimSpace(lines[0])
+	if !strings.HasPrefix(trimmed, "@") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmed, "@")), true
 }
 
 // resolvePath resolves a script-reference path against the document
@@ -135,13 +134,39 @@ func resolvePath(dir, p string) string {
 }
 
 // normalizeNewlines converts CRLF and lone CR to LF (SPEC.md §2.1 accepts
-// CRLF documents; block source is passed to interpreters normalized).
-func normalizeNewlines(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	return strings.ReplaceAll(s, "\r", "\n")
+// CRLF documents; block source is passed to interpreters normalized). The
+// common LF-only case returns src unchanged.
+func normalizeNewlines(src []byte) []byte {
+	if !bytes.ContainsAny(src, "\r") {
+		return src
+	}
+	out := make([]byte, 0, len(src))
+	for i := 0; i < len(src); i++ {
+		if src[i] == '\r' {
+			if i+1 < len(src) && src[i+1] == '\n' {
+				i++
+			}
+			out = append(out, '\n')
+			continue
+		}
+		out = append(out, src[i])
+	}
+	return out
 }
 
-// lineOf converts a byte offset into a 1-based source line.
-func lineOf(src []byte, offset int) int {
-	return 1 + bytes.Count(src[:offset], []byte{'\n'})
+// indexLines records the byte offset where each line starts.
+func indexLines(src []byte) []int {
+	starts := []int{0}
+	for i, c := range src {
+		if c == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
+}
+
+// lineOf converts a byte offset into a 1-based source line using a
+// precomputed line index, avoiding a full scan per heading or block.
+func lineOf(starts []int, offset int) int {
+	return sort.SearchInts(starts, offset+1)
 }

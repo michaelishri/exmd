@@ -50,11 +50,13 @@ func (a Adapter) command(tmpDir string) *exec.Cmd {
 // writeHarnesses stages the per-run harness files. The harnesses are static;
 // block-specific inputs arrive via the internal environment variables.
 func writeHarnesses(dir string) error {
-	if err := os.WriteFile(filepath.Join(dir, "harness.sh"), []byte(bashHarness), 0o644); err != nil {
-		return fmt.Errorf("write bash harness: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "harness.py"), []byte(pythonHarness), 0o644); err != nil {
-		return fmt.Errorf("write python harness: %w", err)
+	for _, h := range []struct{ name, src, label string }{
+		{"harness.sh", bashHarness, "bash"},
+		{"harness.py", pythonHarness, "python"},
+	} {
+		if err := os.WriteFile(filepath.Join(dir, h.name), []byte(h.src), 0o644); err != nil {
+			return fmt.Errorf("write %s harness: %w", h.label, err)
+		}
 	}
 	return nil
 }

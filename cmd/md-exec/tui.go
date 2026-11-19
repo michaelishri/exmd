@@ -1,13 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/michaelishri/md-exec/internal/doc"
 	"github.com/michaelishri/md-exec/internal/tui"
 )
 
@@ -17,13 +17,21 @@ import (
 // selects the palette.
 func cmdTUI(args []string) int {
 	themeName, args, err := parseTheme(args)
+	if errors.Is(err, errHelp) {
+		fmt.Println(usage)
+		return 0
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
 		return 2
 	}
 	sets, positional, err := parseSetArgs(args)
+	if errors.Is(err, errHelp) {
+		fmt.Println(usage)
+		return 0
+	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
+		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
 		return 2
 	}
 	if len(positional) != 1 {
@@ -38,14 +46,13 @@ func cmdTUI(args []string) int {
 	}
 	tui.SetTheme(th)
 
-	res, err := doc.Load(positional[0])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
-		return 2
+	res, code := loadDoc(positional[0])
+	if res == nil {
+		return code
 	}
 	res.Sort()
+	printDiagnostics(res)
 	if res.HasErrors() {
-		printDiagnostics(res)
 		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `md-exec check` reports them all at once"))
 		return 2
 	}
@@ -54,12 +61,7 @@ func cmdTUI(args []string) int {
 		return 2
 	}
 
-	overrides := map[string]string{}
-	for _, s := range sets {
-		overrides[s.key] = s.val
-	}
-
-	p := tea.NewProgram(tui.New(res, overrides), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(tui.New(res, sets.toMap()), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
 		return 2

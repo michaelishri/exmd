@@ -25,10 +25,7 @@ func loadDemo(t *testing.T) *doc.Document {
 
 func TestRenderStructure(t *testing.T) {
 	d := loadDemo(t)
-	out, err := Render(d, 80, false)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
+	out := Render(d, 80, false)
 	if len(out.Lines) == 0 {
 		t.Fatal("no lines rendered")
 	}
@@ -64,10 +61,7 @@ func TestRenderStructure(t *testing.T) {
 func TestRenderWidth(t *testing.T) {
 	d := loadDemo(t)
 	for _, width := range []int{40, 80, 120} {
-		out, err := Render(d, width, false)
-		if err != nil {
-			t.Fatalf("Render(%d): %v", width, err)
-		}
+		out := Render(d, width, false)
 		for i, l := range out.Lines {
 			if w := ansi.StringWidth(l); w > width {
 				t.Fatalf("line %d width %d exceeds %d: %q", i, w, width, l)
@@ -78,14 +72,8 @@ func TestRenderWidth(t *testing.T) {
 
 func TestRenderDeterministic(t *testing.T) {
 	d := loadDemo(t)
-	a, err := Render(d, 80, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := Render(d, 80, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := Render(d, 80, false)
+	b := Render(d, 80, false)
 	if strings.Join(a.Lines, "\n") != strings.Join(b.Lines, "\n") {
 		t.Fatal("render is not deterministic")
 	}
@@ -100,10 +88,7 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	d := loadDemo(t)
-	out, err := Render(d, 80, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := Render(d, 80, true)
 	bm := out.Blocks[0]
 	badge := out.Lines[bm.Line]
 	if strings.Contains(badge, execPanelEscape) {
@@ -160,10 +145,7 @@ func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	d := loadDemo(t)
-	out, err := Render(d, 80, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := Render(d, 80, true)
 	last := out.Blocks[len(out.Blocks)-1]
 	if last.End >= len(out.Lines) {
 		t.Fatalf("last block extent %d past output (%d lines)", last.End, len(out.Lines))
@@ -177,10 +159,7 @@ func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
 // output is followed by an empty line.
 func TestHeadingFollowedByBlank(t *testing.T) {
 	d := loadDemo(t)
-	out, err := Render(d, 80, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := Render(d, 80, true)
 	for _, hm := range out.Headings {
 		if hm.Line+1 >= len(out.Lines) {
 			continue // the document ends with the heading

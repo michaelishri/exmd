@@ -12,6 +12,7 @@ import (
 
 	"github.com/michaelishri/md-exec/internal/exec"
 	"github.com/michaelishri/md-exec/internal/render"
+	"github.com/michaelishri/md-exec/internal/theme"
 )
 
 // eventChanBuffer is sized so that a synchronous test driver cannot
@@ -31,31 +32,35 @@ type inlineDoneMsg struct {
 	index  int
 	result *exec.RunResult
 }
-type inlineErrMsg struct {
-	index int
-	err   error
-}
 
 // inlineState is one block's execution in place: its live output, final
 // status, and the rendered box shown under the block.
 type inlineState struct {
-	active  bool
-	done    bool
-	lines   []string
-	pending string
-	status  int
-	hasEnd  bool
-	result  *exec.RunResult
-	err     error
-	box     []string // cached box lines
-	ch      chan exec.Event
-	ctx     context.Context
-	cancel  context.CancelFunc
+	active    bool
+	done      bool
+	lines     []string
+	pending   string
+	status    int
+	result    *exec.RunResult
+	err       error
+	box       []string // cached box lines
+	rendered  []string // rendered output rows, one per line in lines
+	boxWidth  int      // width used for rendered
+	boxIndent int      // indent used for rendered
+	ch        chan exec.Event
+	finished  chan struct{} // closed when the engine run returns
+	cancel    context.CancelFunc
 }
 
-// shutdownInline cancels any in-flight inline runs before quitting: the
-// engine terminates each process group (§4.7).
+// shutdownGrace bounds how long shutdown waits for a cancelled run. The
+// engine's worst case is two grace periods (SIGTERM, then SIGKILL) plus the
+// harvest, so this is deliberately generous.
+const shutdownGrace = 5 * time.Second
+
+// shutdownInline cancels in-flight runs and waits for them to finish before
+// closing the session: a Session is not safe for concurrent use.
 func (m *Model) shutdownInline() {
+	var active []*inlineState
 	for _, st := range m.inline {
 		if st == nil {
 			continue
@@ -63,13 +68,35 @@ func (m *Model) shutdownInline() {
 		if st.cancel != nil {
 			st.cancel()
 		}
-		if st.active {
-			time.Sleep(300 * time.Millisecond)
+		if st.active && st.finished != nil {
+			active = append(active, st)
 		}
+	}
+	for _, st := range active {
+		waitInline(st, shutdownGrace)
 	}
 	if m.inlineSession != nil {
 		m.inlineSession.Close()
 		m.inlineSession = nil
+	}
+}
+
+// waitInline waits for a run to return, draining its event channel so a full
+// buffer cannot block the engine before it exits.
+func waitInline(st *inlineState, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-st.finished:
+			return
+		case _, ok := <-st.ch:
+			if !ok {
+				st.ch = nil
+			}
+		case <-timer.C:
+			return
+		}
 	}
 }
 
@@ -103,7 +130,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	st := m.stateFor(index)
 	st.active, st.done = true, false
 	st.lines, st.pending, st.result, st.err = nil, "", nil, nil
-	st.status, st.hasEnd, st.box = 0, false, nil
+	st.status, st.box = 0, nil
 
 	// One session for all inline runs carries the harvest delta between
 	// blocks (SPEC.md §4.3): running #3 then #9 sees #3's WORK.
@@ -119,47 +146,57 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	}
 	s := m.inlineSession
 	ctx, cancel := context.WithCancel(context.Background())
-	st.ctx, st.cancel = ctx, cancel
+	st.cancel = cancel
 	// Show the separator immediately, before the first output event.
 	m.rebuildInlineBox(index)
 	m.setContent()
 
 	ch := make(chan exec.Event, eventChanBuffer)
-	st.ch = ch
+	finished := make(chan struct{})
+	st.ch, st.finished = ch, finished
 	emit := func(ev exec.Event) { ch <- ev }
 
 	runCmd := func() tea.Msg {
+		defer close(finished)
 		s.RunBlock(ctx, index, emit)
+		st.result = s.Result()
 		close(ch)
-		return inlineDoneMsg{index: index, result: s.Result()}
+		return nil
 	}
-	return tea.Batch(runCmd, m.inlineListenCmd(index))
+	return tea.Batch(runCmd, m.inlineListenCmd(st, index))
 }
 
-// inlineListenCmd waits for the next event from the given block's engine.
-func (m *Model) inlineListenCmd(index int) tea.Cmd {
+// inlineListenCmd delivers the next event, then reports completion once the
+// channel is drained and closed. This gives the channel a single owner: no
+// event can be lost between the listener and finalization.
+func (m *Model) inlineListenCmd(st *inlineState, index int) tea.Cmd {
+	ch := st.ch
 	return func() tea.Msg {
-		st := m.inline[index]
-		if st == nil || st.ch == nil {
-			return nil
-		}
-		ev, ok := <-st.ch
+		ev, ok := <-ch
 		if !ok {
-			return nil
+			return inlineDoneMsg{index: index, result: st.result}
 		}
 		return inlineEventMsg{index: index, ev: ev}
+	}
+}
+
+// applyEvent folds one engine observation into a block's output.
+func (st *inlineState) applyEvent(ev exec.Event) {
+	switch ev.Kind {
+	case exec.EventOutput:
+		st.write(ev.Data)
+	case exec.EventBlockEnd:
+		st.status = ev.Status
 	}
 }
 
 // applyInlineEvent folds one engine observation into a block's output.
 func (m *Model) applyInlineEvent(index int, ev exec.Event) {
 	st := m.stateFor(index)
-	switch ev.Kind {
-	case exec.EventOutput:
-		st.write(ev.Data)
-	case exec.EventBlockEnd:
-		st.status, st.hasEnd = ev.Status, true
+	if st.done {
+		return
 	}
+	st.applyEvent(ev)
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
 }
@@ -178,30 +215,9 @@ func (st *inlineState) write(chunk []byte) {
 }
 
 // finalizeInline records one block's outcome and flushes trailing output.
-func (m *Model) finalizeInline(index int, result *exec.RunResult, err error) {
+// The listener has already drained the event channel at this point.
+func (m *Model) finalizeInline(index int, result *exec.RunResult) {
 	st := m.stateFor(index)
-	// Drain buffered observations before finishing: the synchronous test
-	// driver can deliver the done message before the listener drains them.
-drain:
-	for {
-		select {
-		case ev, ok := <-st.ch:
-			if !ok {
-				break drain
-			}
-			switch ev.Kind {
-			case exec.EventOutput:
-				st.write(ev.Data)
-			case exec.EventBlockEnd:
-				st.status, st.hasEnd = ev.Status, true
-			}
-		default:
-			break drain
-		}
-	}
-	if err != nil {
-		st.err = err
-	}
 	if st.pending != "" {
 		st.lines = append(st.lines, ansi.Strip(st.pending))
 		st.pending = ""
@@ -224,7 +240,7 @@ func (m *Model) refreshInlineContent(index int) {
 	}
 	// A run whose output is streaming into the selected block keeps its
 	// last output row visible, scrolling only as far as necessary.
-	if m.blockSel != index || m.out == nil || index >= len(m.out.Blocks) {
+	if m.blockSel != index || !m.validBlock(index) {
 		return
 	}
 	st := m.stateFor(index)
@@ -246,31 +262,39 @@ func (m *Model) rebuildInlineBox(index int) {
 		st.box = nil
 		return
 	}
-	surface := lipgloss.NewStyle().Background(lipgloss.Color(render.ExecColor()))
-	edge := execEdgeStyle
-	body := surface.Foreground(lipgloss.Color("#e4e4e9"))
 	w := m.content.Width
-
 	indent := m.inlineIndent(index)
-	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
+	// A resize or a new run invalidates the rendered rows. Otherwise only
+	// the lines added since the last event need styling.
+	if st.boxWidth != w || st.boxIndent != indent || len(st.rendered) > len(st.lines) {
+		st.rendered = nil
+		st.boxWidth, st.boxIndent = w, indent
+	}
 
-	lines := []string{" " + edge.Render(strings.Repeat("─", w-1))}
-	for _, l := range st.lines {
-		room := w - 1 - len(prefix)
+	surface := lipgloss.NewStyle().Background(lipgloss.Color(render.ExecColor()))
+	body := surface.Foreground(lipgloss.Color(theme.Palette.Text))
+	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
+	room := max(0, w-1-len(prefix))
+	for i := len(st.rendered); i < len(st.lines); i++ {
+		l := st.lines[i]
 		if len(l) > room {
 			l = l[:room]
 		}
-		lines = append(lines, " "+body.Render(prefix+l+strings.Repeat(" ", room-len(l))))
+		st.rendered = append(st.rendered,
+			" "+body.Render(prefix+l+strings.Repeat(" ", room-len(l))))
 	}
-	// Close with one empty row.
-	lines = append(lines, " "+body.Render(strings.Repeat(" ", w-1)))
+
+	lines := make([]string, 0, len(st.rendered)+2)
+	lines = append(lines, " "+execEdgeStyle.Render(strings.Repeat("─", max(0, w-1))))
+	lines = append(lines, st.rendered...)
+	lines = append(lines, " "+body.Render(strings.Repeat(" ", max(0, w-1))))
 	st.box = lines
 }
 
 // inlineIndent returns the leading-column count of a block's code text so
 // its output lines can line up with it.
 func (m Model) inlineIndent(index int) int {
-	if m.out == nil || index < 0 || index >= len(m.out.Blocks) {
+	if !m.validBlock(index) {
 		return 2
 	}
 	bm := m.out.Blocks[index]
@@ -295,7 +319,7 @@ func (m Model) inlineInsertions() [][]string {
 	}
 	var items []insertion
 	for index, st := range m.inline {
-		if st == nil || len(st.box) == 0 || index < 0 || index >= len(m.out.Blocks) {
+		if st == nil || len(st.box) == 0 || !m.validBlock(index) {
 			continue
 		}
 		items = append(items, insertion{at: m.out.Blocks[index].End - 1, lines: st.box})

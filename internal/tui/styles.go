@@ -14,17 +14,12 @@ var t = theme.Dark
 // OpenCode-adjacent visual language: no borders — separation comes from
 // background shades — muted chrome, and color reserved for state.
 var (
-	rowStyle      lipgloss.Style
-	selRowStyle   lipgloss.Style
-	tabTitleStyle lipgloss.Style
+	rowStyle    lipgloss.Style
+	selRowStyle lipgloss.Style
 
 	emptyStateStyle lipgloss.Style
 	sepStyle        lipgloss.Style
 	infoStyle       lipgloss.Style
-	errStyle        lipgloss.Style
-	accentStyle     lipgloss.Style
-	successStyle    lipgloss.Style
-	warnStyle       lipgloss.Style
 
 	// sideTitleStyle renders the sidebar's title row — the document's
 	// first h1: bright bold text on the panel background.
@@ -84,11 +79,6 @@ func buildStyles() {
 		Background(lipgloss.Color(t.Primary)).
 		Bold(true)
 
-	tabTitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary)).
-		Background(lipgloss.Color(t.BackgroundPanel)).
-		Bold(true)
-
 	emptyStateStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted)).
 		Background(lipgloss.Color(t.BackgroundPanel))
@@ -100,19 +90,6 @@ func buildStyles() {
 
 	infoStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted))
-
-	errStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Error))
-
-	accentStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary)).
-		Bold(true)
-
-	successStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Success))
-
-	warnStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Warning))
 
 	sideTitleStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).

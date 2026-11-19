@@ -26,6 +26,12 @@ const (
 	sidebarCols     = 50
 	gutterWidth     = 2
 	railWidth       = 1
+	rightMargin     = 1
+	minViewWidth    = 20
+	minViewHeight   = 4
+	footerRows      = 3
+	paneInsets      = 2
+	minContentWidth = 10
 )
 
 type focusArea int
@@ -37,18 +43,19 @@ const (
 
 // Model is the bubbletea model of the viewer.
 type Model struct {
-	doc  *doc.Document
-	path string
+	doc *doc.Document
 
 	width, height int
 	laidOut       bool
 
-	out          *render.Output
-	content      viewport.Model
-	outline      outlineModel
-	focus        focusArea
-	renderErr    string
-	sidebarWidth int
+	out     *render.Output
+	content viewport.Model
+	outline outlineModel
+	focus   focusArea
+
+	// Cached row strings. Built on resize, reused on every View.
+	sep, blankRow, gutterRow string
+	shifts                   []int // inserted box lines per rendered line
 
 	overrides map[string]string
 	theme     theme.Theme
@@ -75,7 +82,6 @@ type Model struct {
 func New(res *doc.Result, overrides map[string]string) Model {
 	m := Model{
 		doc:       res.Doc,
-		path:      res.Doc.Path,
 		content:   viewport.New(0, 0),
 		outline:   newOutline(),
 		focus:     focusContent,
@@ -101,16 +107,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case inlineEventMsg:
 		m.applyInlineEvent(msg.index, msg.ev)
 		if m.inlineActive() {
-			return m, m.inlineListenCmd(msg.index)
+			return m, m.inlineListenCmd(m.stateFor(msg.index), msg.index)
 		}
 		return m, nil
 
 	case inlineDoneMsg:
-		m.finalizeInline(msg.index, msg.result, nil)
-		return m, nil
-
-	case inlineErrMsg:
-		m.finalizeInline(msg.index, nil, msg.err)
+		m.finalizeInline(msg.index, msg.result)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -139,9 +141,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKey processes global and focus-specific keys. It reports whether the
-// key was consumed.
+// handleKey dispatches a key to the global, outline or block handler. It
+// reports whether the key was consumed.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if cmd, handled := m.handleGlobalKey(msg); handled {
+		return cmd, true
+	}
+	if m.focus == focusOutline {
+		return m.handleOutlineKey(msg)
+	}
+	return m.handleBlockKey(msg)
+}
+
+// handleGlobalKey processes keys that work in every focus area.
+func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.shutdownInline()
@@ -165,10 +178,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 	case "v", "esc":
 		if m.blockSel >= 0 {
-			// Leave executable-block selection; the heading the block
-			// belongs to is highlighted again.
+			// Leave block selection. The heading is highlighted again.
 			m.exitBlockMode()
-			return nil, true
 		}
 		return nil, true
 
@@ -197,45 +208,42 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.jumpToSelected()
 		return nil, true
 	}
+	return nil, false
+}
 
-	if m.focus == focusOutline {
-		switch msg.String() {
-		case "j", "down":
-			if m.outline.move(1) {
-				m.jumpToSelected()
-			}
-			return nil, true
-		case "k", "up":
-			if m.outline.move(-1) {
-				m.jumpToSelected()
-			}
-			return nil, true
-		case "g":
-			if m.outline.first() {
-				m.jumpToSelected()
-			}
-			return nil, true
-		case "G":
-			if m.outline.last() {
-				m.jumpToSelected()
-			}
-			return nil, true
-		case "enter":
-			// Enter keeps its original meaning: jump the content to the
-			// highlighted heading. Backtick enters code-block selection.
+// handleOutlineKey moves the sidebar selection. The outline consumes every
+// key while it has focus.
+func (m *Model) handleOutlineKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "j", "down":
+		if m.outline.move(1) {
 			m.jumpToSelected()
-			return nil, true
-		case "`":
-			// Enter executable-block selection: the first code block at or
-			// after the highlighted heading, arrows walking the blocks.
-			m.enterBlockMode()
-			return nil, true
 		}
-		return nil, true // outline focus consumes keys
+	case "k", "up":
+		if m.outline.move(-1) {
+			m.jumpToSelected()
+		}
+	case "g":
+		if m.outline.first() {
+			m.jumpToSelected()
+		}
+	case "G":
+		if m.outline.last() {
+			m.jumpToSelected()
+		}
+	case "enter":
+		// Enter jumps the content to the highlighted heading.
+		m.jumpToSelected()
+	case "`":
+		// Enter block selection at the highlighted heading.
+		m.enterBlockMode()
 	}
+	return nil, true
+}
 
-	// Executable-block selection: the arrows walk the code blocks, g/G
-	// jump to the first and last, and r runs the highlighted block.
+// handleBlockKey walks executable blocks, or scrolls the content when no
+// block is selected.
+func (m *Model) handleBlockKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if m.blockSel >= 0 {
 		switch msg.String() {
 		case "down", "j":
@@ -258,8 +266,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 
 	// Backtick selects the first executable block at or after the
-	// sidebar's highlighted heading (the document's first when none
-	// follows).
+	// sidebar's highlighted heading.
 	if m.blockSel < 0 && msg.String() == "`" && len(m.out.Blocks) > 0 {
 		m.enterBlockMode()
 		return nil, true
@@ -296,38 +303,33 @@ func (m *Model) relayout() {
 	if m.outline.visible {
 		sidebarW = sidebarCols
 	}
-	m.sidebarWidth = sidebarW
 	contentW := w
 	if m.outline.visible {
-		// 2-col gutter, 1-col rail, 1-col right margin.
-		contentW = w - sidebarW - gutterWidth - railWidth - 1
+		contentW = w - sidebarW - gutterWidth - railWidth - rightMargin
 	}
-	contentW = max(10, contentW)
+	contentW = max(minContentWidth, contentW)
 
 	// One blank row above the panes, then the hairline + footer.
-	bodyH := max(1, h-3)
+	bodyH := max(1, h-footerRows)
 	m.paneHeight = bodyH
+	m.blankRow = " "
+	m.gutterRow = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
+	m.sep = sepStyle.Render(strings.Repeat("─", max(1, w)))
 
 	m.content.Width = contentW
 	// The text area carries 1 padding row at its top and bottom — the
 	// same insets as the sidebar — so the viewport shows the body
 	// height minus those two rows.
-	m.content.Height = max(1, bodyH-2)
+	m.content.Height = max(1, bodyH-paneInsets)
 
-	out, err := render.Render(m.doc, contentW, m.colorEnabled())
-	if err != nil {
-		m.renderErr = err.Error()
-	} else {
-		m.renderErr = ""
-		m.out = out
-	}
+	m.out = render.Render(m.doc, contentW, m.colorEnabled())
 
 	if m.out != nil {
 		for index := range m.inline {
 			m.rebuildInlineBox(index)
 		}
 		m.setContent()
-		m.outline.rebuild(m.doc, m.out, m.sidebarWidth)
+		m.outline.rebuild(m.doc, m.out, sidebarW)
 	}
 
 	if m.blockSel >= 0 {
@@ -411,7 +413,7 @@ func (m *Model) exitBlockMode() {
 // the selected block (the last heading at or above its badge line), or -1
 // when the block sits in the title's section.
 func (m *Model) headingForBlock() int {
-	if m.out == nil || m.blockSel < 0 || m.blockSel >= len(m.out.Blocks) {
+	if !m.validBlock(m.blockSel) {
 		return -1
 	}
 	line := m.out.Blocks[m.blockSel].Line
@@ -430,7 +432,7 @@ func (m *Model) headingForBlock() int {
 // selected block into view — if it is already fully visible, nothing
 // moves: the indicator travels, the text stays put.
 func (m *Model) revealBlock() {
-	if m.out == nil || m.blockSel < 0 || m.blockSel >= len(m.out.Blocks) {
+	if !m.validBlock(m.blockSel) {
 		return
 	}
 	bm := m.out.Blocks[m.blockSel]
@@ -465,35 +467,42 @@ func (m *Model) updateSpy() {
 	if m.out == nil {
 		return
 	}
-	off := m.content.YOffset
+	off := m.content.YOffset + 1
 	idx := -1
 	if m.outline.tab == tabHeadings {
-		// Entries carry the rendered line of their heading; the first h1
-		// has no entry (it is the title row), so nothing is selected while
-		// the reader is inside its section.
+		// Entries carry the rendered line of their heading. The first h1
+		// has no entry, so nothing is selected in its section.
+		lines := make([]int, len(m.outline.entries))
 		for i, e := range m.outline.entries {
-			if m.displayLine(e.renderLine) <= off+1 {
-				idx = i
-			} else {
-				break
-			}
+			lines[i] = m.displayLine(e.renderLine)
 		}
-		if m.content.AtBottom() && len(m.outline.entries) > 0 {
-			idx = len(m.outline.entries) - 1
+		idx = lastAtOrBefore(lines, off)
+		if m.content.AtBottom() && len(lines) > 0 {
+			idx = len(lines) - 1
 		}
 	} else {
+		lines := make([]int, len(m.out.Blocks))
 		for i, b := range m.out.Blocks {
-			if m.displayLine(b.Line) <= off+1 {
-				idx = i
-			} else {
-				break
-			}
+			lines[i] = m.displayLine(b.Line)
 		}
-		if m.content.AtBottom() && len(m.out.Blocks) > 0 {
-			idx = len(m.out.Blocks) - 1
+		idx = lastAtOrBefore(lines, off)
+		if m.content.AtBottom() && len(lines) > 0 {
+			idx = len(lines) - 1
 		}
 	}
 	m.outline.sel = idx
+}
+
+// lastAtOrBefore returns the index of the last value <= off, or -1.
+func lastAtOrBefore(values []int, off int) int {
+	idx := -1
+	for i, v := range values {
+		if v > off {
+			break
+		}
+		idx = i
+	}
+	return idx
 }
 
 // View renders the full screen: blank row, body, hairline, footer.
@@ -501,7 +510,7 @@ func (m Model) View() string {
 	if !m.laidOut {
 		return "Loading…"
 	}
-	if m.width < 20 || m.height < 4 {
+	if m.width < minViewWidth || m.height < minViewHeight {
 		return m.content.View()
 	}
 	var sb strings.Builder
@@ -540,9 +549,6 @@ func (m Model) keyHints() string {
 }
 
 func (m Model) bodyView() string {
-	if m.renderErr != "" {
-		return errStyle.Render("render error: " + m.renderErr)
-	}
 	if m.out == nil {
 		return ""
 	}
@@ -555,8 +561,8 @@ func (m Model) bodyView() string {
 	for i := range gutter {
 		// The sidebar's left border line is always primary; focus is
 		// expressed by the strip's background lift.
-		gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
-		margin[i] = " "
+		gutter[i] = m.gutterRow
+		margin[i] = m.blankRow
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		m.railView(),
@@ -573,7 +579,7 @@ func (m Model) bodyView() string {
 func (m Model) paddedContent() string {
 	rows := make([]string, m.paneHeight)
 	for i := range rows {
-		rows[i] = " "
+		rows[i] = m.blankRow
 	}
 	copy(rows[1:], strings.Split(m.content.View(), "\n"))
 	return strings.Join(rows, "\n")
@@ -589,7 +595,7 @@ func (m Model) paddedContent() string {
 func (m Model) railView() string {
 	rows := make([]string, m.paneHeight)
 	for i := range rows {
-		rows[i] = " "
+		rows[i] = m.blankRow
 	}
 	if m.out == nil {
 		return strings.Join(rows, "\n")
@@ -624,7 +630,7 @@ func (m Model) railView() string {
 
 	// Every executed block keeps its status bar while the reader moves.
 	for index, st := range m.inline {
-		if st == nil || index < 0 || index >= len(m.out.Blocks) || (!st.active && !st.done) {
+		if st == nil || !m.validBlock(index) || (!st.active && !st.done) {
 			continue
 		}
 		style := railDoneStyle
@@ -655,7 +661,27 @@ func (m Model) railView() string {
 // setContent installs the document lines, with the inline output box spliced
 // under its block, into the viewport.
 func (m *Model) setContent() {
+	m.updateShifts()
 	m.content.SetContent(strings.Join(m.contentLines(), "\n"))
+}
+
+// updateShifts caches how many output rows each rendered line gains from
+// inline boxes. One pass replaces a scan of every box on every lookup.
+func (m *Model) updateShifts() {
+	if m.out == nil {
+		m.shifts = nil
+		return
+	}
+	shifts := make([]int, len(m.out.Lines)+1)
+	for index, st := range m.inline {
+		if st == nil || len(st.box) == 0 || !m.validBlock(index) {
+			continue
+		}
+		for line := m.out.Blocks[index].End; line < len(shifts); line++ {
+			shifts[line] += len(st.box)
+		}
+	}
+	m.shifts = shifts
 }
 
 // contentLines returns the rendered document with the inline output box
@@ -676,18 +702,16 @@ func (m Model) contentLines() []string {
 // displayLine maps a rendered line index to its position after all inline
 // output boxes spliced before it.
 func (m Model) displayLine(line int) int {
-	shift := 0
-	for index, st := range m.inline {
-		if st == nil || len(st.box) == 0 || m.out == nil ||
-			index < 0 || index >= len(m.out.Blocks) {
-			continue
-		}
-		// Boxes are inserted after the block's last shaded line.
-		if line > m.out.Blocks[index].End-1 {
-			shift += len(st.box)
-		}
+	if len(m.shifts) == 0 {
+		return line
 	}
-	return line + shift
+	if line < 0 {
+		return line
+	}
+	if line >= len(m.shifts) {
+		line = len(m.shifts) - 1
+	}
+	return line + m.shifts[line]
 }
 
 func (m Model) outlineView() string {
@@ -695,7 +719,7 @@ func (m Model) outlineView() string {
 }
 
 func (m Model) sepView() string {
-	return sepStyle.Render(strings.Repeat("─", max(1, m.width)))
+	return m.sep
 }
 
 // composeLeftRight joins a left and right segment on one row, truncating the
@@ -716,6 +740,11 @@ func composeLeftRight(left, right string, width int) string {
 		}
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// validBlock reports whether i selects a rendered executable block.
+func (m Model) validBlock(i int) bool {
+	return m.out != nil && i >= 0 && i < len(m.out.Blocks)
 }
 
 func clamp(v, lo, hi int) int {

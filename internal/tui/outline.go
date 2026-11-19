@@ -14,8 +14,8 @@ const (
 	tabBlocks   = 1
 )
 
-// entry is one navigable row of the sidebar.
-type entry struct {
+// outlineEntry is one navigable row of the sidebar.
+type outlineEntry struct {
 	label      string
 	level      int // heading level for indentation (headings tab)
 	renderLine int // 0-based rendered line to jump to
@@ -30,41 +30,34 @@ type outlineModel struct {
 	sel     int
 	visible bool
 	width   int
-	entries []entry
+	entries []outlineEntry
 }
 
 func newOutline() outlineModel {
 	return outlineModel{tab: tabHeadings}
 }
 
-// firstH1 returns the text of the document's first level-1 heading. It is
-// typically the first body line, but not necessarily — the scan makes no
-// position assumption. Documents without an h1 fall back to the title.
-func firstH1(d *doc.Document) string {
-	for _, h := range d.Headings {
+// firstHeading returns the text and index of the first level-1 heading.
+// It makes no position assumption. Documents without an h1 fall back to the
+// document title and return -1.
+func firstHeading(d *doc.Document) (string, int) {
+	for i, h := range d.Headings {
 		if h.Level == 1 {
-			return h.Text
+			return h.Text, i
 		}
 	}
-	return d.HeadingText()
+	return d.HeadingText(), -1
 }
 
 // rebuild recomputes entries from the current render and tab.
 func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	o.width = width
-	o.title = firstH1(d)
+	title, skip := firstHeading(d)
+	o.title = title
 	o.entries = o.entries[:0]
 	switch o.tab {
 	case tabHeadings:
-		// The first h1 is the sidebar's title row, not a selectable
-		// entry — the outline starts with whatever follows it.
-		skip := -1
-		for i, h := range d.Headings {
-			if h.Level == 1 {
-				skip = i
-				break
-			}
-		}
+		// The first h1 is the title row, not a selectable entry.
 		for i, h := range d.Headings {
 			if i == skip {
 				continue
@@ -76,7 +69,7 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 			if strings.TrimSpace(label) == "" {
 				label = "(untitled)"
 			}
-			o.entries = append(o.entries, entry{
+			o.entries = append(o.entries, outlineEntry{
 				label:      label,
 				level:      h.Level,
 				renderLine: out.Headings[i].Line,
@@ -87,7 +80,7 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 			if i >= len(d.Blocks) {
 				break
 			}
-			o.entries = append(o.entries, entry{
+			o.entries = append(o.entries, outlineEntry{
 				label:      bm.Label,
 				renderLine: bm.Line,
 			})
@@ -99,8 +92,8 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 }
 
 // move shifts the cursor and reports whether anything changed. Index -1 is
-// the title row: it sits above the first entry and takes the reader to the
-// very top of the document, so moving up from the first entry lands there.
+// the title row: it sits above the first outlineEntry and takes the reader to the
+// very top of the document, so moving up from the first outlineEntry lands there.
 func (o *outlineModel) move(delta int) bool {
 	if len(o.entries) == 0 {
 		return false

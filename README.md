@@ -1,4 +1,4 @@
-# md-exec
+# exmd
 
 > Executable Markdown: ordinary `.md` files that run.
 

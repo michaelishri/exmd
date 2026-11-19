@@ -40,16 +40,34 @@ type Diagnostic struct {
 }
 
 func (d Diagnostic) String() string {
-	switch {
-	case d.Block > 0 && d.Line > 0:
-		return fmt.Sprintf("block %d (line %d): %s: %s", d.Block, d.Line, d.Severity, d.Message)
-	case d.Block > 0:
-		return fmt.Sprintf("block %d: %s: %s", d.Block, d.Severity, d.Message)
-	case d.Line > 0:
-		return fmt.Sprintf("line %d: %s: %s", d.Line, d.Severity, d.Message)
-	default:
-		return fmt.Sprintf("%s: %s", d.Severity, d.Message)
+	if d.Line > 0 {
+		return fmt.Sprintf("line %d: %s: %s", d.Line, d.Severity, d.Detail())
 	}
+	return fmt.Sprintf("%s: %s", d.Severity, d.Detail())
+}
+
+// newDiag builds one diagnostic; all sites use this so severity, line and
+// message are populated consistently.
+func newDiag(sev Severity, line int, msg string) Diagnostic {
+	return Diagnostic{Severity: sev, Line: line, Message: msg}
+}
+
+// newBlockDiag builds a diagnostic tied to an executable block.
+func newBlockDiag(sev Severity, line, block int, msg string) Diagnostic {
+	return Diagnostic{Severity: sev, Line: line, Block: block, Message: msg}
+}
+
+func (r *Result) add(d Diagnostic) {
+	r.Diagnostics = append(r.Diagnostics, d)
+}
+
+// Detail is the message with its block context, if any. Both the diagnostic
+// formatter and the CLI printer use it.
+func (d Diagnostic) Detail() string {
+	if d.Block > 0 {
+		return fmt.Sprintf("block %d: %s", d.Block, d.Message)
+	}
+	return d.Message
 }
 
 // HasErrors reports whether any error-severity diagnostic is present.

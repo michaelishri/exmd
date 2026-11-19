@@ -44,6 +44,20 @@ type Theme struct {
 	Running Color
 }
 
+// Palette holds the content colors shared by the renderer and the UI.
+// Both layers must use the same values for the same role.
+var Palette = struct {
+	Text, Bright, Soft, Muted, Accent, Panel, Rule Color
+}{
+	Text:   "#e4e4e9",
+	Bright: "#f4f4f8",
+	Soft:   "#c8c8d0",
+	Muted:  "#8a8a95",
+	Accent: "#8f8af4",
+	Panel:  "#1a1a21",
+	Rule:   "#3a3a44",
+}
+
 // Dark is the default theme.
 var Dark = Theme{
 	Name:              "dark",
@@ -52,9 +66,9 @@ var Dark = Theme{
 	BackgroundElement: "#24242c",
 	Border:            "#2b2b34",
 	Separator:         "#444448",
-	Text:              "#e4e4e9",
-	TextMuted:         "#87878f",
-	Primary:           "#8f8af4",
+	Text:              Palette.Text,
+	TextMuted:         Palette.Muted,
+	Primary:           Palette.Accent,
 	Success:           "#6fbf73",
 	Error:             "#f05b5b",
 	Warning:           "#e2b93d",
