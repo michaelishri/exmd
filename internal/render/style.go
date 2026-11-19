@@ -58,17 +58,20 @@ func (o *Output) appendPlain(chunk string) {
 }
 
 // appendBadge adds the lightweight executable-block marker that ties the
-// rendered view to the runbook semantics (SPEC.md §4.8 observation).
+// rendered view to the runbook semantics (SPEC.md §4.8 observation). While
+// color is available the badge shares the executable block's surface: the
+// panel background spans the content width, so badge and code read as one
+// block.
 func (o *Output) appendBadge(b *doc.Block, color bool) {
 	label := fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b))
-	var line string
 	if !color {
-		line = "  ▸ " + label
-	} else {
-		accent := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-		muted := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-		line = "  " + accent.Render("▸") + " " + muted.Render(label)
+		o.Lines = append(o.Lines, ansi.Truncate("  ▸ "+label, max(1, o.Width), "…"))
+		return
 	}
+	accent := lipgloss.NewStyle().Foreground(lipgloss.Color("#8f8af4"))
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a95"))
+	bg := lipgloss.NewStyle().Background(lipgloss.Color(execPanel)).Width(o.Width)
+	line := bg.Render("  " + accent.Render("▸") + " " + muted.Render(label))
 	o.Lines = append(o.Lines, ansi.Truncate(line, max(1, o.Width), "…"))
 }
 
@@ -120,11 +123,10 @@ func darkStyle() gansi.StyleConfig {
 	return c
 }
 
-// execPanel shades executable blocks with a violet-tinted background
-// derived from the primary token, so fences that run read as interactive
-// surfaces next to neutral display-only fences. The tint is deliberately
-// strong enough to survive modest terminal palettes.
-const execPanel = "#2b2b41"
+// execPanel shades executable blocks with the sidebar's focused surface
+// color (the theme's BackgroundPanel shade), so a code block reads as the
+// same raised surface the focused sidebar does.
+const execPanel = "#18181e"
 
 // execDarkStyle is darkStyle with the fenced-block background lifted to the
 // executable shade; inline code in prose keeps the panel shade.

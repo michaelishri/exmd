@@ -109,9 +109,9 @@ func TestHeadingFollowedByBlank(t *testing.T) {
 }
 
 func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
-	// Executable blocks lift one background shade so they read as
-	// interactive surfaces next to display-only fences; inline code in
-	// prose keeps the panel shade in both styles.
+	// Executable blocks carry the sidebar's focused surface color; display
+	// fences keep the neutral panel shade; inline code in prose keeps the
+	// panel shade in both styles.
 	dark, exec := darkStyle(), execDarkStyle()
 	if dark.CodeBlock.StylePrimitive.BackgroundColor == nil ||
 		exec.CodeBlock.StylePrimitive.BackgroundColor == nil {
@@ -119,6 +119,9 @@ func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
 	}
 	if *dark.CodeBlock.StylePrimitive.BackgroundColor == *exec.CodeBlock.StylePrimitive.BackgroundColor {
 		t.Fatal("exec and display fences share a background")
+	}
+	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != "#18181e" {
+		t.Fatalf("exec background = %q, want the sidebar's focused shade (#18181e)", got)
 	}
 	if *dark.Code.StylePrimitive.BackgroundColor != *exec.Code.StylePrimitive.BackgroundColor {
 		t.Fatal("inline code shade should not change between styles")
