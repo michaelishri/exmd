@@ -54,13 +54,9 @@ var (
 	// holds focus: the frame is the text area's border.
 	focusFrameStyle lipgloss.Style
 
-	// sideBorderStyle draws the sidebar's focus border: a primary line
-	// along the strip's left edge while focused.
+	// sideBorderStyle draws the sidebar's left border line — always
+	// primary; focus is expressed by the strip's background lift.
 	sideBorderStyle lipgloss.Style
-
-	// sideBorderMutedStyle is the resting border: the same line in the
-	// muted chrome color while the sidebar does not hold focus.
-	sideBorderMutedStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -149,7 +145,4 @@ func buildStyles() {
 	// line along the strip's left edge.
 	sideBorderStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
-
-	sideBorderMutedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
 }

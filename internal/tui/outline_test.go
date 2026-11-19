@@ -228,11 +228,10 @@ func TestSidebarFocusShading(t *testing.T) {
 		t.Fatalf("focused row should use the panel background: %q", focused[3])
 	}
 
-	// The border line: muted while resting, primary while focused. (The
-	// primary's blue channel quantizes to 243 in the color pipeline.)
+	// The border line: always primary, in both states.
 	uv, fv := m.View(), gotFocusedView(t)
-	if !strings.Contains(uv, "38;2;135;135;143m│") {
-		t.Fatal("resting border should be muted chrome")
+	if !strings.Contains(uv, "38;2;143;138;243m│") {
+		t.Fatal("resting border should be primary")
 	}
 	if !strings.Contains(fv, "38;2;143;138;243m│") {
 		t.Fatal("focused border should be primary")

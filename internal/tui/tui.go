@@ -513,14 +513,9 @@ func (m Model) bodyView() string {
 	margin := make([]string, m.content.Height)
 	focused := m.focus == focusOutline
 	for i := range gutter {
-		// Sidebar focus draws a single left border beside the strip: one
-		// line in the gutter's right column — primary while focused,
-		// muted chrome while the sidebar rests.
-		if focused {
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
-		} else {
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderMutedStyle.Render("│")
-		}
+		// The sidebar's left border line is always primary; focus is
+		// expressed by the strip's background lift.
+		gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
 		margin[i] = " "
 		if focused {
 			side[i] = " "
