@@ -150,6 +150,32 @@ func TestFocusBorderMoves(t *testing.T) {
 	}
 }
 
+// TestSidebarFocusKeepsPadding checks the focused sidebar's padding: the
+// border line takes the top row but a blank row remains between it and the
+// title, and a blank row remains above the bottom border line.
+func TestSidebarFocusKeepsPadding(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	v := strings.Split(m.outline.view(m.content.Height, true), "\n")
+
+	if !strings.Contains(ansi.Strip(v[0]), "──") {
+		t.Fatalf("missing top border line: %q", v[0])
+	}
+	if strings.TrimSpace(v[1]) != "" {
+		t.Fatalf("no blank row between the border and the title: %q", v[1])
+	}
+	if !strings.Contains(ansi.Strip(v[2]), "md-exec feature tour") {
+		t.Fatalf("title row wrong: %q", v[2])
+	}
+
+	last := len(v) - 1
+	if !strings.Contains(ansi.Strip(v[last]), "──") {
+		t.Fatalf("missing bottom border line: %q", v[last])
+	}
+	if strings.TrimSpace(v[last-1]) != "" {
+		t.Fatalf("no blank row above the bottom border: %q", v[last-1])
+	}
+}
+
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
 // shift its text: the stripped row is identical before and after, and the
 // background carries the selection instead.
