@@ -128,7 +128,7 @@ func (m *Model) applyInlineEvent(index int, ev exec.Event) {
 		st.status, st.hasEnd = ev.Status, true
 	}
 	m.rebuildInlineBox(index)
-	m.refreshInlineContent()
+	m.refreshInlineContent(index)
 }
 
 // write accumulates output chunks into complete lines, stripping ANSI like
@@ -181,16 +181,31 @@ drain:
 		st.session = nil
 	}
 	m.rebuildInlineBox(index)
-	m.refreshInlineContent()
+	m.refreshInlineContent(index)
 }
 
 // refreshInlineContent re-sets the viewport content when output grows,
 // following the bottom when the reader was already there.
-func (m *Model) refreshInlineContent() {
+func (m *Model) refreshInlineContent(index int) {
 	was := m.content.AtBottom()
 	m.setContent()
 	if was {
 		m.content.GotoBottom()
+		return
+	}
+	// A run whose output is streaming into the selected block keeps its
+	// last output row visible, scrolling only as far as necessary.
+	if m.blockSel != index || m.out == nil || index >= len(m.out.Blocks) {
+		return
+	}
+	st := m.stateFor(index)
+	if len(st.box) == 0 {
+		return
+	}
+	last := m.displayLine(m.out.Blocks[index].End-1) + len(st.box)
+	want := clamp(last-m.content.Height+1, 0, m.maxScroll())
+	if m.content.YOffset < want {
+		m.content.SetYOffset(want)
 	}
 }
 

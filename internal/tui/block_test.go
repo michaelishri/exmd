@@ -303,6 +303,36 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 	}
 }
 
+// TestInlineLastBlockOutputIsVisible checks that streaming output from the
+// final block scrolls into view as it arrives.
+func TestInlineLastBlockOutputIsVisible(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	got := enterBlockModeFromFirstHeading(t, m)
+	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	got = mm.(Model)
+	index := len(got.doc.Blocks) - 1
+	if got.blockSel != index {
+		t.Fatalf("blockSel = %d, want the last block %d", got.blockSel, index)
+	}
+
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = pump(t, mm.(Model), cmd)
+	if !got.inline[index].done {
+		t.Fatal("last block's inline run did not finish")
+	}
+
+	bm := got.out.Blocks[index]
+	lastRow := got.displayLine(bm.End-1) + len(got.inline[index].box)
+	if got.content.YOffset+got.content.Height <= lastRow {
+		t.Fatalf("output not visible: offset=%d height=%d last row=%d",
+			got.content.YOffset, got.content.Height, lastRow)
+	}
+}
+
 // TestInlineFailureRailTurnsRed checks that a failing inline run marks the
 // block's gutter bar red.
 func TestInlineFailureRailTurnsRed(t *testing.T) {
