@@ -100,10 +100,9 @@ func TestBlockRailSpansBlock(t *testing.T) {
 	got := enterBlockModeFromFirstHeading(t, m)
 
 	bm := got.out.Blocks[0]
-	// The badge's pane row: viewport row (bm.Line - YOffset) plus the
-	// content's top padding row. The bar covers the block's visible
-	// extent.
-	start := bm.Line - got.content.YOffset + 1
+	// The bar covers the code block (starting below its metadata row),
+	// not the badge line above it.
+	start := bm.Line + 1 - got.content.YOffset + 1
 	end := bm.End - got.content.YOffset + 1
 	visible := 0
 	for r := 0; r < got.paneHeight; r++ {
@@ -116,11 +115,17 @@ func TestBlockRailSpansBlock(t *testing.T) {
 	if n := strings.Count(v, "▌"); n != visible {
 		t.Fatalf("rail bar rows = %d, want %d (the block's visible extent)", n, visible)
 	}
-	// The first bar row is the badge's row.
+	// The badge's row carries no rail bar.
 	lines := strings.Split(v, "\n")
+	badgePane := bm.Line - got.content.YOffset + 1
+	if badgePane >= 0 && badgePane < got.paneHeight &&
+		strings.Contains(ansi.Strip(lines[1+badgePane]), "▌") {
+		t.Fatal("rail should start below the metadata row")
+	}
+	// The first bar row is the block's first shaded row.
 	if start >= 0 && start < got.paneHeight {
 		if !strings.Contains(ansi.Strip(lines[1+start]), "▌") {
-			t.Fatalf("rail bar missing at the badge's row: %q", ansi.Strip(lines[1+start]))
+			t.Fatalf("rail bar missing at the code block's first row: %q", ansi.Strip(lines[1+start]))
 		}
 	}
 }

@@ -112,6 +112,8 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 				// line; add a matching shaded blank row below the last one.
 				out.Lines = append(out.Lines,
 					"\x1b[48;2;24;24;30m"+strings.Repeat(" ", width)+"\x1b[0m")
+				// And a plain spacing row below the whole box.
+				out.Lines = append(out.Lines, "")
 			}
 		default:
 			out.appendGlamour(chunk, width, style)

@@ -657,10 +657,11 @@ func (m Model) railView() string {
 		return strings.Join(rows, "\n")
 	}
 
-	// Block selection: the bar spans the entire code block.
+	// Block selection: the bar spans the code block itself — starting
+	// below the metadata/badge row — through its last line.
 	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
 		bm := m.out.Blocks[m.blockSel]
-		start := bm.Line - m.content.YOffset + 1
+		start := bm.Line + 1 - m.content.YOffset + 1
 		end := bm.End - m.content.YOffset + 1
 		for r := 0; r < m.paneHeight; r++ {
 			if r >= start && r < end {

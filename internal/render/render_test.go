@@ -105,9 +105,21 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	bm := out.Blocks[0]
-	badge, code := out.Lines[bm.Line], out.Lines[bm.Line+1]
+	badge := out.Lines[bm.Line]
 	if strings.Contains(badge, "48;2;24;24;30") {
 		t.Fatalf("badge row should sit on the page background: %q", badge)
+	}
+	// The first non-blank row after the badge is actual code text (the
+	// row right after the badge is the shaded blank above the code).
+	var code string
+	for i := bm.Line + 1; i < bm.End; i++ {
+		if strings.TrimSpace(ansi.Strip(out.Lines[i])) != "" {
+			code = out.Lines[i]
+			break
+		}
+	}
+	if code == "" {
+		t.Fatal("no code text row in the block")
 	}
 	if !strings.Contains(code, "48;2;24;24;30") {
 		t.Fatalf("code row has no exec background: %q", code)
@@ -115,12 +127,24 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	if !strings.Contains(code, "\x1b[0m\x1b[48;2;24;24;30m") {
 		t.Fatal("background is not re-emitted after chroma's token reset")
 	}
-	// The block ends with a shaded blank row, mirroring the blank row
-	// above its first code line.
-	last := out.Lines[bm.End]
-	if !strings.Contains(last, "48;2;24;24;30") ||
-		strings.TrimSpace(ansi.Strip(last)) != "" {
-		t.Fatalf("no shaded blank row after the code: %q", last)
+	// The block ends with a shaded blank row inside its surface, then a
+	// plain spacing row on the page.
+	shadedBlank := out.Lines[bm.End-1]
+	if !strings.Contains(shadedBlank, "48;2;24;24;30") ||
+		strings.TrimSpace(ansi.Strip(shadedBlank)) != "" {
+		t.Fatalf("no shaded blank row after the code: %q", shadedBlank)
+	}
+	plain := out.Lines[bm.End]
+	if strings.Contains(plain, "48;2;24;24;30") || strings.TrimSpace(ansi.Strip(plain)) != "" {
+		t.Fatalf("no plain spacing row below the block: %q", plain)
+	}
+	// Code lines line up with the heading that owns the block.
+	leading := func(s string) int {
+		v := ansi.Strip(s)
+		return len(v) - len(strings.TrimLeft(v, " "))
+	}
+	if leading(code) != leading(out.Lines[out.Headings[1].Line]) {
+		t.Fatalf("code indented %d spaces, heading %d", leading(code), leading(out.Lines[out.Headings[1].Line]))
 	}
 }
 
