@@ -47,9 +47,10 @@ var (
 	focusFrameStyle lipgloss.Style
 
 	// sideBorderStyle draws the border around the sidebar while it holds
-	// focus — on the page background (not the panel color), so the
-	// sidebar's surface stops at the border cells and the border reads as
-	// the outermost edge.
+	// focus, using half-block glyphs: the primary half faces outward (the
+	// exact edge of the sidebar's surface) and the panel-colored half
+	// faces inward, so neither the page nor the panel color bleeds past
+	// the line.
 	sideBorderStyle lipgloss.Style
 )
 
@@ -122,8 +123,11 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.Primary))
 
 	// sideBorderStyle draws the border around the sidebar while it holds
-	// focus — on the page background, so the sidebar's panel color stops
-	// at the border cells and nothing bleeds outside the border.
+	// focus, using half-block glyphs: the primary half faces outward (the
+	// exact edge of the sidebar's surface) and the panel-colored half
+	// faces inward, so neither the page nor the panel color bleeds past
+	// the line.
 	sideBorderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary))
+		Foreground(lipgloss.Color(t.Primary)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 }

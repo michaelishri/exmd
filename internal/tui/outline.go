@@ -170,7 +170,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 	setRow(titleRow, sideTitleStyle.Width(o.width).Render(
 		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
 	if focused {
-		setRow(0, sideBorderStyle.Render(strings.Repeat("─", o.width)))
+		setRow(0, sideBorderStyle.Render(strings.Repeat("▀", o.width)))
 	}
 
 	top := 3       // pad + title + pad
@@ -240,7 +240,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 	}
 	// Bottom pad — the sidebar border's bottom line while focused.
 	if focused {
-		setRow(height-1, sideBorderStyle.Render(strings.Repeat("─", o.width)))
+		setRow(height-1, sideBorderStyle.Render(strings.Repeat("▄", o.width)))
 	}
 	return strings.Join(rows, "\n")
 }

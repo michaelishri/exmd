@@ -518,16 +518,17 @@ func (m Model) bodyView() string {
 			gutter[i] = strings.Repeat(" ", gutterWidth)
 			margin[i] = " "
 		case i == 0:
-			// The border hugs the sidebar: the corner columns sit in the
-			// gutter's right column and the margin column.
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("┌")
-			margin[i] = sideBorderStyle.Render("┐")
+			// The border hugs the sidebar: the line cells sit in the
+			// gutter's right column and the margin column, their primary
+			// half facing outward along the sidebar's edge.
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▀")
+			margin[i] = sideBorderStyle.Render("▀")
 		case i == m.content.Height-1:
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("└")
-			margin[i] = sideBorderStyle.Render("┘")
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▄")
+			margin[i] = sideBorderStyle.Render("▄")
 		default:
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
-			margin[i] = sideBorderStyle.Render("│")
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▌")
+			margin[i] = sideBorderStyle.Render("▐")
 		}
 		if focused {
 			side[i] = " "

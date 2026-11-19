@@ -93,24 +93,29 @@ func TestRailMarksHeadingLine(t *testing.T) {
 	}
 
 	// The jump put the heading one row below the viewport top (its blank
-	// separator row is at the top): exactly one bar, on the same body row
-	// as the heading's text, just inside the frame's left column.
+	// separator row is at the top): exactly one rail bar, on the same body
+	// row as the heading's text, at the rail column. The sidebar's own
+	// border bars live further right and don't count.
 	v := got.View()
-	if n := strings.Count(v, "▌"); n != 1 {
-		t.Fatalf("bar rows = %d, want 1", n)
-	}
+	railRows := 0
+	found := false
 	for _, line := range strings.Split(v, "\n") {
-		if strings.Contains(line, "## 1. Preflight and point-of-use guards") {
-			// Measure the display column, not the byte offset (the glyphs
-			// are multi-byte runes).
-			stripped := ansi.Strip(line)
-			if i := strings.Index(stripped, "▌"); ansi.StringWidth(stripped[:i]) != frameWidth {
-				t.Fatalf("bar not beside the heading's row: %q", line)
-			}
-			return
+		stripped := ansi.Strip(line)
+		i := strings.Index(stripped, "▌")
+		if i < 0 || ansi.StringWidth(stripped[:i]) != railWidth {
+			continue
+		}
+		railRows++
+		if strings.Contains(stripped, "## 1. Preflight and point-of-use guards") {
+			found = true
 		}
 	}
-	t.Fatal("heading row not found in the view")
+	if railRows != 1 {
+		t.Fatalf("rail bar rows = %d, want 1", railRows)
+	}
+	if !found {
+		t.Fatal("rail bar not beside the selected heading's row")
+	}
 }
 
 // TestFocusBorderMoves checks the focus representation: with the text area
@@ -127,15 +132,13 @@ func TestFocusBorderMoves(t *testing.T) {
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got := mm.(Model)
 	v = got.View()
-	if n := strings.Count(v, "┌"); n != 1 {
-		t.Fatalf("boxes after tab = %d, want 1 (sidebar border only)", n)
+	// Sidebar focus: the viewport frame disappears entirely; the sidebar's
+	// own half-block border remains.
+	if n := strings.Count(v, "┌"); n != 0 {
+		t.Fatalf("frame boxes after tab = %d, want 0 (frame gone)", n)
 	}
-	lines := strings.Split(v, "\n")
-	if strings.HasPrefix(ansi.Strip(lines[0]), "┌") {
-		t.Fatal("the viewport frame should be gone with the sidebar focused")
-	}
-	if !strings.Contains(ansi.Strip(lines[1]), "┌") {
-		t.Fatal("the sidebar border should be present")
+	if n := strings.Count(v, "▀"); n < 50 {
+		t.Fatalf("sidebar border top line too short: %d cells", n)
 	}
 
 	// Tab back: the viewport frame returns.
@@ -169,11 +172,11 @@ func TestSidebarFocusKeepsLayout(t *testing.T) {
 	}
 
 	// The tiles are decorated while focused.
-	if !strings.Contains(ansi.Strip(focused[0]), "──") {
+	if !strings.Contains(ansi.Strip(focused[0]), "▀▀") {
 		t.Fatalf("missing top border line: %q", focused[0])
 	}
 	last := len(focused) - 1
-	if !strings.Contains(ansi.Strip(focused[last]), "──") {
+	if !strings.Contains(ansi.Strip(focused[last]), "▄▄") {
 		t.Fatalf("missing bottom border line: %q", focused[last])
 	}
 	if strings.TrimSpace(focused[last-1]) != "" {
