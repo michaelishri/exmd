@@ -309,22 +309,22 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		case "down", "j":
 			if m.blockSel < len(m.out.Blocks)-1 {
 				m.blockSel++
-				m.jumpToBlock()
+				m.revealBlock()
 			}
 			return nil, true
 		case "up", "k":
 			if m.blockSel > 0 {
 				m.blockSel--
-				m.jumpToBlock()
+				m.revealBlock()
 			}
 			return nil, true
 		case "g":
 			m.blockSel = 0
-			m.jumpToBlock()
+			m.revealBlock()
 			return nil, true
 		case "G":
 			m.blockSel = len(m.out.Blocks) - 1
-			m.jumpToBlock()
+			m.revealBlock()
 			return nil, true
 		}
 	}
@@ -415,7 +415,7 @@ func (m *Model) relayout() {
 	}
 
 	if m.blockSel >= 0 {
-		m.jumpToBlock()
+		m.revealBlock()
 	} else if m.laidOut && len(m.outline.entries) > 0 {
 		sel := clamp(m.outline.sel, 0, len(m.outline.entries)-1)
 		m.outline.sel = sel
@@ -443,6 +443,7 @@ func (m *Model) jumpToSelected() {
 // enterBlockMode selects the first executable block at or after the
 // sidebar's highlighted heading — the document's first when none follows —
 // and moves focus to the text area, where the arrows walk the blocks.
+// Nothing scrolls: the indicator moves to the block where it stands.
 func (m *Model) enterBlockMode() {
 	if m.out == nil || len(m.out.Blocks) == 0 {
 		return
@@ -458,7 +459,7 @@ func (m *Model) enterBlockMode() {
 		}
 	}
 	m.focus = focusContent
-	m.jumpToBlock()
+	m.revealBlock()
 }
 
 // exitBlockMode leaves executable-block selection and highlights the
@@ -491,16 +492,27 @@ func (m *Model) headingForBlock() int {
 	return idx
 }
 
-// jumpToBlock scrolls the content so the selected block's badge sits at the
-// top of the viewport, just below the padding row.
-func (m *Model) jumpToBlock() {
+// revealBlock scrolls the content only as far as needed to bring the
+// selected block into view — if it is already fully visible, nothing
+// moves: the indicator travels, the text stays put.
+func (m *Model) revealBlock() {
 	if m.out == nil || m.blockSel < 0 || m.blockSel >= len(m.out.Blocks) {
 		return
 	}
-	y := clamp(m.out.Blocks[m.blockSel].Line, 0, m.maxScroll())
-	m.content.SetYOffset(y)
+	bm := m.out.Blocks[m.blockSel]
+	top := m.content.YOffset
+	bottom := top + m.content.Height
+	switch {
+	case bm.Line >= top && bm.End <= bottom:
+		return // already fully visible
+	case bm.Line < top:
+		// Above the viewport: pin its badge to the top.
+		m.content.SetYOffset(clamp(bm.Line, 0, m.maxScroll()))
+	default:
+		// Below the viewport: pin its last line to the bottom.
+		m.content.SetYOffset(clamp(bm.End-m.content.Height, 0, m.maxScroll()))
+	}
 }
-
 func (m *Model) maxScroll() int {
 	if m.out == nil {
 		return 0

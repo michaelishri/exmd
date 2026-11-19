@@ -100,19 +100,28 @@ func TestBlockRailSpansBlock(t *testing.T) {
 	got := enterBlockModeFromFirstHeading(t, m)
 
 	bm := got.out.Blocks[0]
-	want := bm.End - bm.Line
-	if want > got.paneHeight {
-		want = got.paneHeight
+	// The badge's pane row: viewport row (bm.Line - YOffset) plus the
+	// content's top padding row. The bar covers the block's visible
+	// extent.
+	start := bm.Line - got.content.YOffset + 1
+	end := bm.End - got.content.YOffset + 1
+	visible := 0
+	for r := 0; r < got.paneHeight; r++ {
+		if r >= start && r < end {
+			visible++
+		}
 	}
 
 	v := got.View()
-	if n := strings.Count(v, "▌"); n != want {
-		t.Fatalf("rail bar rows = %d, want %d (the block's extent)", n, want)
+	if n := strings.Count(v, "▌"); n != visible {
+		t.Fatalf("rail bar rows = %d, want %d (the block's visible extent)", n, visible)
 	}
-	// The badge sits at viewport row 0 → pane row 1 → View line 2.
+	// The first bar row is the badge's row.
 	lines := strings.Split(v, "\n")
-	if !strings.Contains(ansi.Strip(lines[2]), "▌") {
-		t.Fatalf("rail bar missing at the badge's row: %q", ansi.Strip(lines[2]))
+	if start >= 0 && start < got.paneHeight {
+		if !strings.Contains(ansi.Strip(lines[1+start]), "▌") {
+			t.Fatalf("rail bar missing at the badge's row: %q", ansi.Strip(lines[1+start]))
+		}
 	}
 }
 
