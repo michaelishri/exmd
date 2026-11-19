@@ -111,13 +111,17 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 }
 
 // boundaries returns the chunk start lines: the first body line, then every
-// heading and every executable-block fence, in document order.
+// heading and every executable-block fence, in document order. Each heading
+// chunk ends right after the heading line — a synthetic boundary starts the
+// section's content as its own chunk, which the separator blanks before, so
+// every heading is followed by an empty line in the rendered output.
 func boundaries(d *doc.Document) []boundary {
 	var bs []boundary
 	bs = append(bs, boundary{line: d.BodyLine, heading: -1, block: -1})
 	for i, h := range d.Headings {
 		if h.Line > 0 {
 			bs = append(bs, boundary{line: h.Line, heading: i, block: -1})
+			bs = append(bs, boundary{line: h.Line + 1, heading: -1, block: -1})
 		}
 	}
 	for i, b := range d.Blocks {

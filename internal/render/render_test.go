@@ -89,6 +89,25 @@ func TestRenderDeterministic(t *testing.T) {
 	}
 }
 
+// TestHeadingFollowedByBlank checks that every heading in the rendered
+// output is followed by an empty line.
+func TestHeadingFollowedByBlank(t *testing.T) {
+	d := loadDemo(t)
+	out, err := Render(d, 80, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hm := range out.Headings {
+		if hm.Line+1 >= len(out.Lines) {
+			continue // the document ends with the heading
+		}
+		if strings.TrimSpace(ansi.Strip(out.Lines[hm.Line+1])) != "" {
+			t.Fatalf("heading at line %d not followed by a blank line: %q",
+				hm.Line, ansi.Strip(out.Lines[hm.Line+1]))
+		}
+	}
+}
+
 func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
 	// Executable blocks lift one background shade so they read as
 	// interactive surfaces next to display-only fences; inline code in

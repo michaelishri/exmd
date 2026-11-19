@@ -87,6 +87,9 @@ func darkStyle() gansi.StyleConfig {
 
 	c.Document.StylePrimitive.Color = strPtr(text)
 
+	// The h1 block is rebuilt wholesale here (dropping glamour's inherited
+	// prefix/margin fields); the h2-h6 keep their inherited settings with
+	// a cleared prefix.
 	c.H1 = gansi.StyleBlock{
 		StylePrimitive: gansi.StylePrimitive{
 			Color: strPtr(bright),
