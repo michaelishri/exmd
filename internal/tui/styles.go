@@ -15,7 +15,6 @@ var t = theme.Dark
 var (
 	rowStyle      lipgloss.Style
 	selRowStyle   lipgloss.Style
-	markerStyle   lipgloss.Style
 	tabTitleStyle lipgloss.Style
 
 	emptyStateStyle lipgloss.Style
@@ -49,13 +48,12 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.TextMuted)).
 		Background(lipgloss.Color(t.BackgroundPanel))
 
+	// The selected row inverts into the primary (state) color: the
+	// background carries the selection, and bold keeps it visible in the
+	// notty theme where color is unavailable.
 	selRowStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Text)).
-		Background(lipgloss.Color(t.BackgroundElement))
-
-	markerStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary)).
-		Background(lipgloss.Color(t.BackgroundElement)).
+		Foreground(lipgloss.Color(t.Background)).
+		Background(lipgloss.Color(t.Primary)).
 		Bold(true)
 
 	tabTitleStyle = lipgloss.NewStyle().

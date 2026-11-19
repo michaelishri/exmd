@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
@@ -70,6 +71,39 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 	// the outer margins sitting outside the strip.
 	if lines[len(lines)-1] == "" {
 		t.Fatal("strip should be painted to the bottom of the body")
+	}
+}
+
+// TestSelectionKeepsTextColumn checks that selecting an entry does not
+// shift its text: the stripped row is identical before and after, and the
+// background carries the selection instead.
+func TestSelectionKeepsTextColumn(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	before := strings.Split(m.outline.view(m.content.Height), "\n")
+
+	// Focus the sidebar and select the first entry.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := mm.(Model)
+	after := strings.Split(got.outline.view(got.content.Height), "\n")
+
+	if got.outline.sel != 0 {
+		t.Fatalf("sel = %d, want 0", got.outline.sel)
+	}
+	if ansi.Strip(after[3]) != ansi.Strip(before[3]) {
+		t.Fatalf("selection shifted the text: %q -> %q",
+			ansi.Strip(before[3]), ansi.Strip(after[3]))
+	}
+	if after[3] == before[3] {
+		t.Fatal("selected row should render with a different background")
+	}
+	// Unselected rows keep their exact rendering.
+	if after[4] != before[4] {
+		t.Fatal("unselected rows should not change when the cursor moves")
 	}
 }
 

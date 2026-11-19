@@ -212,18 +212,17 @@ func (o *outlineModel) view(height int) string {
 			indent = strings.Repeat("  ", n)
 		}
 		label := indent + e.label
+		// The selection is carried entirely by the row's background: the
+		// text keeps its column, so nothing shifts when the cursor moves.
+		text := ansi.Truncate(label, o.width-panePad-1, "…")
 		if idx == o.sel {
-			// The marker occupies two cells after the base pad, so the
-			// text budget is two columns tighter to keep the right edge.
-			text := ansi.Truncate(label, o.width-panePad-3, "…")
-			setRow(row, selRowStyle.Width(o.width).Render(pad+markerStyle.Render("▸")+" "+text))
+			setRow(row, selRowStyle.Width(o.width).Render(pad+text))
 		} else {
 			// h1/h2 rows read bright; deeper heading levels stay muted.
 			rowBg := rowStyle
 			if o.tab == tabHeadings && e.level <= 2 {
 				rowBg = rowHiStyle
 			}
-			text := ansi.Truncate(label, o.width-panePad-1, "…")
 			setRow(row, rowBg.Width(o.width).Render(pad+text))
 		}
 	}
