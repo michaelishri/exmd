@@ -52,7 +52,8 @@ they never execute blocks:
 
 - `md-exec check DOC` — validate the document: frontmatter, fence grammar, adapters
   and interpreters, script-reference files; reports all diagnostics at once
-- `md-exec print DOC` — render the document to the terminal
+- `md-exec print DOC [--width N] [--theme auto|dark|notty]` — render the
+  document to the terminal
 - `md-exec list DOC` — enumerate executable blocks: index, language, kind (embedded /
   `@script`), line number, referenced path
 - `md-exec globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
@@ -68,23 +69,8 @@ Because the spec mandates no particular interface, nothing prevents other confor
 runners from executing runbooks headless (CI, pipelines) — the reference tool simply
 optimizes for human use.
 
-## Status
-
-- [x] Spec v1 draft (`SPEC.md`)
-- [x] Document load path: frontmatter + block extraction (goldmark + yaml.v3)
-- [x] Headless utilities: `check`, `list`, `globals`, `print`
-- [x] TUI viewer: rendered content pane + outline/blocks sidebar (borderless, OpenCode-style)
-- [x] Execution core: `bash` and `python3` adapters, env harvest
-- [x] Inline execution UX: `` ` `` selects executable blocks, `r` runs the
-      highlighted block in place with live output, arrows walk between blocks,
-      `s` stops (the engine terminates the current process group, SPEC §4.7);
-      the footer shows context-aware shortcuts and the file path;
-      `md-exec DOC --set K=V` overrides
-- [x] `--theme auto|dark|notty` selects the palette for the TUI and `print`
-      (auto: dark when the terminal supports color, notty otherwise)
-
 ## Docs
 
 - [`SPEC.md`](SPEC.md) — the specification (start here for format and semantics)
-- [`docs/10-design-principles-for-delightful-clis.md`](docs/10-design-principles-for-delightful-clis.md) —
+- [`docs/cli-design-principles.md`](docs/cli-design-principles.md) —
   CLI design principles shaping the tool's UX
