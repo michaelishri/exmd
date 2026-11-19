@@ -54,9 +54,13 @@ var (
 	// holds focus: the frame is the text area's border.
 	focusFrameStyle lipgloss.Style
 
-	// sideBorderStyle draws the sidebar's focus border: a single primary
-	// line along the strip's left edge.
+	// sideBorderStyle draws the sidebar's focus border: a primary line
+	// along the strip's left edge while focused.
 	sideBorderStyle lipgloss.Style
+
+	// sideBorderMutedStyle is the resting border: the same line in the
+	// muted chrome color while the sidebar does not hold focus.
+	sideBorderMutedStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -118,12 +122,19 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.Text)).
 		Background(lipgloss.Color(t.BackgroundPanel))
 
-	// The resting shades: identical to the focused surfaces but on the
-	// muted panel background.
-	rowMutedStyle = rowStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
-	rowHiMutedStyle = rowHiStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
-	sideTitleMutedStyle = sideTitleStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
-	emptyStateMutedStyle = emptyStateStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
+	// The sidebar's resting shades: no background at all — the strip
+	// blends into the page exactly like the text area — with the same
+	// text colors as the focused surfaces. Focus lifts the strip onto the
+	// panel background.
+	rowMutedStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.TextMuted))
+	rowHiMutedStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Text))
+	sideTitleMutedStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Text)).
+		Bold(true)
+	emptyStateMutedStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.TextMuted))
 
 	gutterBarStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
@@ -138,4 +149,7 @@ func buildStyles() {
 	// line along the strip's left edge.
 	sideBorderStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
+
+	sideBorderMutedStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.TextMuted))
 }

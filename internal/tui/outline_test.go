@@ -200,10 +200,11 @@ func cellAt(s string, col int) string {
 	return ""
 }
 
-// TestSidebarFocusShading checks the resting-to-focused background lift:
-// the strip's rows carry the same text in both states but render with the
-// muted panel shade while unfocused and the full panel shade when focused.
-// TrueColor is forced so the two dark shades remain distinguishable.
+// TestSidebarFocusShading checks the resting-to-focused lift: while the
+// sidebar rests its rows carry no background at all (they blend into the
+// page like the text area) and its border line is muted chrome; focus
+// lifts the rows onto the panel background and the border to primary.
+// TrueColor is forced so the exact colors are assertable.
 func TestSidebarFocusShading(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -217,16 +218,33 @@ func TestSidebarFocusShading(t *testing.T) {
 	if ansi.Strip(unfocused[3]) != ansi.Strip(focused[3]) {
 		t.Fatal("test setup: the rows should carry the same text")
 	}
-	if unfocused[3] == focused[3] {
-		t.Fatal("the strip should lift from the muted shade when focused")
+	if strings.Contains(unfocused[3], "48;2;") {
+		t.Fatalf("resting rows should carry no background: %q", unfocused[3])
 	}
-	// And the focused strip matches the panel shade, not the muted one.
+	if !strings.Contains(unfocused[3], "38;2;227;227;233") {
+		t.Fatalf("resting row should keep its bright text color: %q", unfocused[3])
+	}
 	if !strings.Contains(focused[3], "48;2;24;24;30") {
 		t.Fatalf("focused row should use the panel background: %q", focused[3])
 	}
-	if !strings.Contains(unfocused[3], "48;2;19;19;23") {
-		t.Fatalf("unfocused row should use the muted background: %q", unfocused[3])
+
+	// The border line: muted while resting, primary while focused. (The
+	// primary's blue channel quantizes to 243 in the color pipeline.)
+	uv, fv := m.View(), gotFocusedView(t)
+	if !strings.Contains(uv, "38;2;135;135;143m│") {
+		t.Fatal("resting border should be muted chrome")
 	}
+	if !strings.Contains(fv, "38;2;143;138;243m│") {
+		t.Fatal("focused border should be primary")
+	}
+}
+
+// gotFocusedView tabs focus to the sidebar and returns the rendered view.
+func gotFocusedView(t *testing.T) string {
+	t.Helper()
+	m := newViewer(t, 120, 40)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	return mm.(Model).View()
 }
 
 // TestSelectionKeepsTextColumn checks that selecting an entry does not

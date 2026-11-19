@@ -45,17 +45,16 @@ func TestNottyTokensEmpty(t *testing.T) {
 	// plain text.
 	for _, th := range []Theme{Notty} {
 		for name, c := range map[string]Color{
-			"Background":           th.Background,
-			"BackgroundPanel":      th.BackgroundPanel,
-			"BackgroundPanelMuted": th.BackgroundPanelMuted,
-			"BackgroundElement":    th.BackgroundElement,
-			"Border":               th.Border,
-			"Text":                 th.Text,
-			"TextMuted":            th.TextMuted,
-			"Primary":              th.Primary,
-			"Success":              th.Success,
-			"Error":                th.Error,
-			"Warning":              th.Warning,
+			"Background":        th.Background,
+			"BackgroundPanel":   th.BackgroundPanel,
+			"BackgroundElement": th.BackgroundElement,
+			"Border":            th.Border,
+			"Text":              th.Text,
+			"TextMuted":         th.TextMuted,
+			"Primary":           th.Primary,
+			"Success":           th.Success,
+			"Error":             th.Error,
+			"Warning":           th.Warning,
 		} {
 			if c != "" {
 				t.Errorf("Notty.%s = %q, want empty", name, c)
