@@ -138,11 +138,10 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	if strings.Contains(plain, "48;2;24;24;30") || strings.TrimSpace(ansi.Strip(plain)) != "" {
 		t.Fatalf("no plain spacing row below the block: %q", plain)
 	}
-	// The code text stays indented inside its shaded box: glamour's
-	// two-column block margin, with the first column carrying the exec
-	// background (so the block reads as an indented surface).
-	if !strings.HasPrefix(code, "\x1b[48;2;24;24;30m") {
-		t.Fatalf("the first column of a code row should carry the background: %q", code)
+	// The first column stays on the page background: the shaded surface
+	// begins at column 1, so the block reads as indented.
+	if !strings.HasPrefix(code, " \x1b[48;2;24;24;30m") {
+		t.Fatalf("the first column should be page-colored: %q", code)
 	}
 	leading := func(s string) int {
 		v := ansi.Strip(s)

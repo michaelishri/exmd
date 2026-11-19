@@ -147,12 +147,16 @@ func execDarkStyle() gansi.StyleConfig {
 func paintExecLines(lines []string, width int) {
 	const bg = "\x1b[48;2;24;24;30m" // #18181e, true color
 	for i, line := range lines {
-		visible := ansi.StringWidth(line)
-		painted := bg + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bg)
-		if visible < width {
-			painted += strings.Repeat(" ", width-visible)
+		// Leave the first column on the page background: the shaded
+		// surface starts one column in. Consume one of the code block's
+		// indenting spaces so the code text itself does not shift.
+		body := ansi.Cut(line, 1, ansi.StringWidth(line))
+		body = ansi.Truncate(body, width-1, "")
+		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m"+bg)
+		if visible := ansi.StringWidth(body); visible < width-1 {
+			body += bg + strings.Repeat(" ", width-1-visible)
 		}
-		lines[i] = painted + "\x1b[0m"
+		lines[i] = " " + bg + body + "\x1b[0m"
 	}
 }
 
