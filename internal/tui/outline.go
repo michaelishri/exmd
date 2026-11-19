@@ -141,9 +141,10 @@ const panePad = 1
 // view renders the sidebar as a full-height shaded column: a blank pad
 // row, the document's first h1 as the title row (two columns in), a blank
 // pad row, then the entries, with blank rows padding the bottom. While the
-// sidebar holds focus, border lines run along its top and bottom and the
-// title shifts down one row, keeping its blank row above it; the vertical
-// border columns come from the adjacent gutter and margin columns.
+// sidebar holds focus, its top and bottom pad tiles are decorated with the
+// border lines — same rows, same panel background — and the vertical
+// border columns (from the adjacent gutter and margin columns) share the
+// panel background, so nothing shifts when focus moves.
 func (o *outlineModel) view(height int, focused bool) string {
 	if !o.visible {
 		return ""
@@ -159,23 +160,20 @@ func (o *outlineModel) view(height int, focused bool) string {
 		}
 	}
 
-	// Title row: the document's first h1, two columns in. While focused
-	// the border line takes the top row and the title moves down one, so
-	// it keeps a blank row above it in both states.
+	// Title row: the document's first h1, two columns in — at the same row
+	// in both states, so nothing shifts when focus moves. The top and
+	// bottom pad tiles carry the border lines while focused: same rows,
+	// same panel background, just decorated.
 	titleRow := 1
-	if focused {
-		setRow(0, sideBorderStyle.Render(strings.Repeat("─", o.width)))
-		titleRow = 2
-	}
 	const titlePad = 2
 	setRow(titleRow, sideTitleStyle.Width(o.width).Render(
 		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
-
-	top := titleRow + 2 // blank pad below the title, then entries
-	bottomPad := 1
 	if focused {
-		bottomPad = 2 // blank pad above the bottom border line
+		setRow(0, sideBorderStyle.Render(strings.Repeat("─", o.width)))
 	}
+
+	top := 3       // pad + title + pad
+	bottomPad := 2 // blank row above the bottom border tile
 	visible := height - top - bottomPad
 	if visible < 1 {
 		visible = 1
@@ -202,7 +200,6 @@ func (o *outlineModel) view(height int, focused bool) string {
 		}
 		return strings.Join(rows, "\n")
 	}
-
 	pad := strings.Repeat(" ", panePad)
 	for r := 0; r < visible; r++ {
 		row := top + r

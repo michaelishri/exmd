@@ -49,7 +49,7 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 	if n < 2 {
 		t.Fatalf("demo should have several headings, got %d", n)
 	}
-	if n > rows-4 {
+	if n > rows-5 {
 		t.Fatalf("demo headings exceed the sidebar: %d", n)
 	}
 	if m.outline.sel != -1 {
@@ -150,29 +150,34 @@ func TestFocusBorderMoves(t *testing.T) {
 	}
 }
 
-// TestSidebarFocusKeepsPadding checks the focused sidebar's padding: the
-// border line takes the top row but a blank row remains between it and the
-// title, and a blank row remains above the bottom border line.
-func TestSidebarFocusKeepsPadding(t *testing.T) {
+// TestSidebarFocusKeepsLayout checks the focused sidebar: the border lines
+// are drawn on the existing pad tiles, so the layout is identical with and
+// without focus — the title stays put — and a blank row remains above the
+// bottom border line.
+func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	v := strings.Split(m.outline.view(m.content.Height, true), "\n")
+	unfocused := strings.Split(m.outline.view(m.content.Height, false), "\n")
+	focused := strings.Split(m.outline.view(m.content.Height, true), "\n")
 
-	if !strings.Contains(ansi.Strip(v[0]), "──") {
-		t.Fatalf("missing top border line: %q", v[0])
-	}
-	if strings.TrimSpace(v[1]) != "" {
-		t.Fatalf("no blank row between the border and the title: %q", v[1])
-	}
-	if !strings.Contains(ansi.Strip(v[2]), "md-exec feature tour") {
-		t.Fatalf("title row wrong: %q", v[2])
+	// Nothing shifts: every content row strips to the same text in both
+	// states — only the top and bottom border tiles are decorated.
+	for i := 1; i < len(unfocused)-1; i++ {
+		if ansi.Strip(unfocused[i]) != ansi.Strip(focused[i]) {
+			t.Fatalf("row %d shifted on focus:\n unfocused: %q\n focused:  %q",
+				i, ansi.Strip(unfocused[i]), ansi.Strip(focused[i]))
+		}
 	}
 
-	last := len(v) - 1
-	if !strings.Contains(ansi.Strip(v[last]), "──") {
-		t.Fatalf("missing bottom border line: %q", v[last])
+	// The tiles are decorated while focused.
+	if !strings.Contains(ansi.Strip(focused[0]), "──") {
+		t.Fatalf("missing top border line: %q", focused[0])
 	}
-	if strings.TrimSpace(v[last-1]) != "" {
-		t.Fatalf("no blank row above the bottom border: %q", v[last-1])
+	last := len(focused) - 1
+	if !strings.Contains(ansi.Strip(focused[last]), "──") {
+		t.Fatalf("missing bottom border line: %q", focused[last])
+	}
+	if strings.TrimSpace(focused[last-1]) != "" {
+		t.Fatalf("no blank row above the bottom border: %q", focused[last-1])
 	}
 }
 

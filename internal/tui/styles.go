@@ -47,7 +47,8 @@ var (
 	focusFrameStyle lipgloss.Style
 
 	// sideBorderStyle draws the border around the sidebar while it holds
-	// focus.
+	// focus — on the sidebar's own panel background, so the border tiles
+	// blend with the strip and the layout never shifts.
 	sideBorderStyle lipgloss.Style
 )
 
@@ -120,5 +121,6 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.Primary))
 
 	sideBorderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary))
+		Foreground(lipgloss.Color(t.Primary)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 }
