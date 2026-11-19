@@ -18,6 +18,9 @@ func (o *Output) appendGlamour(chunk string, width int, style gansi.StyleConfig)
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),
+		// True-color chroma so code-block backgrounds are emitted as exact
+		// RGB, matching the badge rows and the sidebar surface.
+		glamour.WithChromaFormatter("terminal16m"),
 	)
 	if err != nil {
 		o.appendPlain(chunk)
@@ -128,12 +131,30 @@ func darkStyle() gansi.StyleConfig {
 // same raised surface the focused sidebar does.
 const execPanel = "#18181e"
 
-// execDarkStyle is darkStyle with the fenced-block background lifted to the
-// executable shade; inline code in prose keeps the panel shade.
+// execDarkStyle is darkStyle with the executable shade on the code block's
+// primitive (the margin cells); the code text rows are painted by
+// paintExecLines, since both chroma terminal formatters clear their
+// Background style entry.
 func execDarkStyle() gansi.StyleConfig {
 	c := darkStyle()
 	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(execPanel)
 	return c
+}
+
+// paintExecLines applies the executable-block background to the lines
+// glamour rendered for a code chunk. Chroma emits a reset after each token,
+// so the background must be re-emitted after every reset; lines are padded
+// to the chunk width so the shaded surface spans the whole content pane.
+func paintExecLines(lines []string, width int) {
+	const bg = "\x1b[48;2;24;24;30m" // #18181e, true color
+	for i, line := range lines {
+		visible := ansi.StringWidth(line)
+		painted := bg + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+bg)
+		if visible < width {
+			painted += strings.Repeat(" ", width-visible)
+		}
+		lines[i] = painted + "\x1b[0m"
+	}
 }
 
 func strPtr(s string) *string { return &s }

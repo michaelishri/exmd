@@ -103,7 +103,11 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			// Strip the :exec suffix so chroma picks the right lexer; this
 			// only affects rendering, never execution (SPEC.md §9).
 			chunk = stripExecSuffix(chunk)
+			start := len(out.Lines)
 			out.appendGlamour(chunk, width, execStyle)
+			if color {
+				paintExecLines(out.Lines[start:], width)
+			}
 		default:
 			out.appendGlamour(chunk, width, style)
 		}

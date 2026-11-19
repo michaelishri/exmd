@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/md-exec/internal/doc"
 )
@@ -86,6 +88,32 @@ func TestRenderDeterministic(t *testing.T) {
 	}
 	if strings.Join(a.Lines, "\n") != strings.Join(b.Lines, "\n") {
 		t.Fatal("render is not deterministic")
+	}
+}
+
+// TestExecCodeRowsCarryBackground checks that an executable block's surface
+// covers its code text, not just its badge row — chroma emits a per-token
+// reset that would otherwise clear the background.
+func TestExecCodeRowsCarryBackground(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	d := loadDemo(t)
+	out, err := Render(d, 80, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bm := out.Blocks[0]
+	badge, code := out.Lines[bm.Line], out.Lines[bm.Line+1]
+	if !strings.Contains(badge, "48;2;24;24;30") {
+		t.Fatalf("badge row has no exec background: %q", badge)
+	}
+	if !strings.Contains(code, "48;2;24;24;30") {
+		t.Fatalf("code row has no exec background: %q", code)
+	}
+	if !strings.Contains(code, "\x1b[0m\x1b[48;2;24;24;30m") {
+		t.Fatal("background is not re-emitted after chroma's token reset")
 	}
 }
 
