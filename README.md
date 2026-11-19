@@ -44,6 +44,16 @@ Rules of thumb:
 - The tool may add UX on top; it never weakens spec semantics (no interpolation, no
   persistent sessions — see SPEC.md §9).
 
+## Install with Homebrew
+
+On macOS or Linux with an ARM64 or x86-64 processor, install from the
+[Homebrew tap](https://github.com/michaelishri/homebrew-tap).
+
+```sh
+brew install michaelishri/tap/exmd
+exmd --version
+```
+
 ## The tool
 
 `exmd` is the reference implementation of the spec, written in Go. **Execution is a
@@ -77,3 +87,4 @@ optimizes for human use.
 - [`SPEC.md`](SPEC.md) — the specification (start here for format and semantics)
 - [`docs/cli-design-principles.md`](docs/cli-design-principles.md) —
   CLI design principles shaping the tool's UX
+- [`docs/releasing.md`](docs/releasing.md) — how to build and publish a GitHub release
