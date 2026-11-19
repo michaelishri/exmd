@@ -42,7 +42,7 @@ func TestViewerLayout(t *testing.T) {
 	if m.outline.width != 50 {
 		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-50-gutterWidth-1 {
+	if m.content.Width != 120-50-gutterWidth-2 {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()

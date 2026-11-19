@@ -25,6 +25,7 @@ const (
 	minSidebarWidth = 90
 	sidebarCols     = 50
 	gutterWidth     = 2
+	railWidth       = 1
 )
 
 type focusArea int
@@ -314,8 +315,9 @@ func (m *Model) relayout() {
 	contentW := w
 	if m.outline.visible {
 		// Even outer padding around the sidebar: 2-col gutter on the left,
-		// 1-col margin on the right.
-		contentW = w - sidebarW - gutterWidth - 1
+		// 1-col margin on the right. The text area carries a 1-column
+		// selection rail at its left edge.
+		contentW = w - sidebarW - gutterWidth - 1 - railWidth
 	}
 	contentW = max(10, contentW)
 
@@ -468,45 +470,41 @@ func (m Model) bodyView() string {
 	if !m.outline.visible {
 		return content
 	}
+	gutter := make([]string, m.content.Height)
+	for i := range gutter {
+		gutter[i] = strings.Repeat(" ", gutterWidth)
+	}
 	margin := make([]string, m.content.Height)
 	for i := range margin {
 		margin[i] = " "
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
+		m.railView(),
 		content,
-		m.gutterView(),
+		strings.Join(gutter, "\n"),
 		m.outlineView(),
 		strings.Join(margin, "\n"),
 	)
 }
 
-// gutterView builds the gutter between the content and the sidebar: blank,
-// except a primary-colored bar beside the lines of the currently selected
-// sidebar entry's section (its heading through the next one). The bar
-// tracks the selection whether it came from the cursor or the scroll-spy,
-// and renders nothing when no entry is selected.
-func (m Model) gutterView() string {
+// railView builds the one-column rail at the left edge of the text area:
+// blank, except a primary-colored bar beside the selected entry's heading
+// line (the heading itself, not its whole section). The bar tracks the
+// selection whether it came from the cursor or the scroll-spy, and renders
+// nothing when no entry is selected.
+func (m Model) railView() string {
 	rows := make([]string, m.content.Height)
 	for i := range rows {
-		rows[i] = strings.Repeat(" ", gutterWidth)
+		rows[i] = " "
 	}
 	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
 		return strings.Join(rows, "\n")
 	}
 
-	// Section extent in 1-based rendered lines: from the selected entry's
-	// line through the line before the next entry's (or the document end).
-	start := m.outline.entries[m.outline.sel].renderLine
-	end := len(m.out.Lines) + 1
-	if m.outline.sel+1 < len(m.outline.entries) {
-		end = m.outline.entries[m.outline.sel+1].renderLine
-	}
-
-	bar := gutterBarStyle.Render("▌")
-	for r := 0; r < m.content.Height; r++ {
-		if line := m.content.YOffset + r + 1; line >= start && line < end {
-			rows[r] = bar + strings.Repeat(" ", gutterWidth-1)
-		}
+	// The selected heading's rendered line (1-based) as a viewport row.
+	r := m.outline.entries[m.outline.sel].renderLine - 1 - m.content.YOffset
+	if 0 <= r && r < m.content.Height {
+		rows[r] = gutterBarStyle.Render("▌")
 	}
 	return strings.Join(rows, "\n")
 }

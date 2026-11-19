@@ -33,7 +33,8 @@ var (
 	// deeper heading levels use rowStyle's muted text.
 	rowHiStyle lipgloss.Style
 
-	// gutterBarStyle colors the selection rail in the left gutter.
+	// gutterBarStyle colors the selection rail at the left edge of the
+	// text area.
 	gutterBarStyle lipgloss.Style
 )
 
