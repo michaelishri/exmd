@@ -125,45 +125,13 @@ func darkStyle() gansi.StyleConfig {
 	return c
 }
 
-// Executable blocks sit just above the canvas — only a hair lighter than
-// the theme's Background (#0e0e11) — so they read as a quiet raised surface
-// without competing with the prose.
-const (
-	execR, execG, execB = 16, 16, 20
-)
-
-var (
-	execPanel       = fmt.Sprintf("#%02x%02x%02x", execR, execG, execB)
-	execPanelEscape = fmt.Sprintf("\x1b[48;2;%d;%d;%dm", execR, execG, execB)
-)
-
-// execDarkStyle is darkStyle with the executable shade on the code block's
-// primitive (the margin cells); the code text rows are painted by
-// paintExecLines, since both chroma terminal formatters clear their
-// Background style entry.
+// execDarkStyle leaves executable code blocks on the page background: the
+// most subtle treatment, so the block is marked by its badge, indentation,
+// spacing rows and selection rail rather than by a competing shade.
 func execDarkStyle() gansi.StyleConfig {
 	c := darkStyle()
-	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(execPanel)
+	c.CodeBlock.StylePrimitive.BackgroundColor = nil
 	return c
-}
-
-// paintExecLines applies the executable-block background to the lines
-// glamour rendered for a code chunk. Chroma emits a reset after each token,
-// so the background must be re-emitted after every reset; lines are padded
-// to the chunk width so the shaded surface spans the whole content pane.
-func paintExecLines(lines []string, width int) {
-	for i, line := range lines {
-		// Leave the first column on the page background: the shaded
-		// surface starts one column in. Consume one of the code block's
-		// indenting spaces so the code text itself does not shift.
-		body := ansi.Cut(line, 1, ansi.StringWidth(line))
-		body = ansi.Truncate(body, width-1, "")
-		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m"+execPanelEscape)
-		if visible := ansi.StringWidth(body); visible < width-1 {
-			body += execPanelEscape + strings.Repeat(" ", width-1-visible)
-		}
-		lines[i] = " " + execPanelEscape + body + "\x1b[0m"
-	}
 }
 
 func strPtr(s string) *string { return &s }

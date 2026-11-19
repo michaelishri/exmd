@@ -104,16 +104,13 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			// Strip the :exec suffix so chroma picks the right lexer; this
 			// only affects rendering, never execution (SPEC.md §9).
 			chunk = stripExecSuffix(chunk)
-			start := len(out.Lines)
 			out.appendGlamour(chunk, width, execStyle)
 			if color {
-				paintExecLines(out.Lines[start:], width)
 				// Glamour's code block has a blank row above its first code
-				// line; add a matching shaded blank row below the last one.
-				out.Lines = append(out.Lines,
-					" "+execPanelEscape+strings.Repeat(" ", width-1)+"\x1b[0m")
-				// And a plain spacing row below the whole box.
-				out.Lines = append(out.Lines, "")
+				// line; add a matching blank row below the last one, plus a
+				// spacing row below the whole block. The surface itself is
+				// the page background — no shading.
+				out.Lines = append(out.Lines, "", "")
 			}
 		default:
 			out.appendGlamour(chunk, width, style)

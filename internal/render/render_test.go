@@ -91,10 +91,10 @@ func TestRenderDeterministic(t *testing.T) {
 	}
 }
 
-// TestExecCodeRowsCarryBackground checks that an executable block's surface
-// covers its code text, not just its badge row — chroma emits a per-token
-// reset that would otherwise clear the background.
-func TestExecCodeRowsCarryBackground(t *testing.T) {
+// TestExecCodeRowsUsePageBackground checks that executable blocks carry
+// no background of their own — badge, code rows and spacing all sit on the
+// page — while keeping their indentation and spacing cues.
+func TestExecCodeRowsUsePageBackground(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prevProfile)
@@ -105,12 +105,9 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	bm := out.Blocks[0]
-	badge := out.Lines[bm.Line]
-	if strings.Contains(badge, execPanelEscape) {
-		t.Fatalf("badge row should sit on the page background: %q", badge)
-	}
+
 	// The first non-blank row after the badge is actual code text (the
-	// row right after the badge is the shaded blank above the code).
+	// row right after the badge is the blank above the code).
 	var code string
 	for i := bm.Line + 1; i < bm.End; i++ {
 		if strings.TrimSpace(ansi.Strip(out.Lines[i])) != "" {
@@ -121,28 +118,20 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	if code == "" {
 		t.Fatal("no code text row in the block")
 	}
-	if !strings.Contains(code, execPanelEscape) {
-		t.Fatalf("code row has no exec background: %q", code)
+	// No row in the block carries a background escape; only foreground
+	// colors from glamour/chroma remain.
+	for i := bm.Line; i < bm.End; i++ {
+		if strings.Contains(out.Lines[i], "\x1b[48;") {
+			t.Fatalf("block row %d carries a background: %q", i, out.Lines[i])
+		}
 	}
-	if !strings.Contains(code, "\x1b[0m"+execPanelEscape) {
-		t.Fatal("background is not re-emitted after chroma's token reset")
+	// Blank row after the code, then a spacing row below the block.
+	for i := bm.End - 1; i <= bm.End; i++ {
+		if strings.TrimSpace(ansi.Strip(out.Lines[i])) != "" {
+			t.Fatalf("no blank spacing row at %d: %q", i, out.Lines[i])
+		}
 	}
-	// The block ends with a shaded blank row inside its surface, then a
-	// plain spacing row on the page.
-	shadedBlank := out.Lines[bm.End-1]
-	if !strings.Contains(shadedBlank, execPanelEscape) ||
-		strings.TrimSpace(ansi.Strip(shadedBlank)) != "" {
-		t.Fatalf("no shaded blank row after the code: %q", shadedBlank)
-	}
-	plain := out.Lines[bm.End]
-	if strings.Contains(plain, execPanelEscape) || strings.TrimSpace(ansi.Strip(plain)) != "" {
-		t.Fatalf("no plain spacing row below the block: %q", plain)
-	}
-	// The first column stays on the page background: the shaded surface
-	// begins at column 1, so the block reads as indented.
-	if !strings.HasPrefix(code, " "+execPanelEscape) {
-		t.Fatalf("the first column should be page-colored: %q", code)
-	}
+	// Code remains indented inside the block by its two-column margin.
 	leading := func(s string) int {
 		v := ansi.Strip(s)
 		return len(v) - len(strings.TrimLeft(v, " "))
@@ -171,20 +160,16 @@ func TestHeadingFollowedByBlank(t *testing.T) {
 	}
 }
 
-func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
-	// Executable blocks carry the sidebar's focused surface color; display
-	// fences keep the neutral panel shade; inline code in prose keeps the
-	// panel shade in both styles.
+func TestExecBlocksUseNoBackground(t *testing.T) {
+	// Executable blocks render on the page background; display-only fences
+	// keep the neutral panel shade. Inline code in prose is unchanged.
 	dark, exec := darkStyle(), execDarkStyle()
-	if dark.CodeBlock.StylePrimitive.BackgroundColor == nil ||
-		exec.CodeBlock.StylePrimitive.BackgroundColor == nil {
-		t.Fatal("code-block backgrounds unset")
+	if dark.CodeBlock.StylePrimitive.BackgroundColor == nil {
+		t.Fatal("display fence background unset")
 	}
-	if *dark.CodeBlock.StylePrimitive.BackgroundColor == *exec.CodeBlock.StylePrimitive.BackgroundColor {
-		t.Fatal("exec and display fences share a background")
-	}
-	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != execPanel {
-		t.Fatalf("exec background = %q, want %q", got, execPanel)
+	if exec.CodeBlock.StylePrimitive.BackgroundColor != nil {
+		t.Fatalf("exec block should have no background, got %q",
+			*exec.CodeBlock.StylePrimitive.BackgroundColor)
 	}
 	if *dark.Code.StylePrimitive.BackgroundColor != *exec.Code.StylePrimitive.BackgroundColor {
 		t.Fatal("inline code shade should not change between styles")
