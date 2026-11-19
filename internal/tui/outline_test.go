@@ -92,16 +92,22 @@ func TestRailMarksHeadingLine(t *testing.T) {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
 	}
 
-	// The jump put the heading's line at the top of the viewport: exactly
-	// one bar, on the first body row (View line 1), at the rail column.
+	// The jump put the heading one row below the viewport top (its blank
+	// separator row is at the top): exactly one bar, on the same body row
+	// as the heading's text, at the rail column.
 	v := got.View()
 	if n := strings.Count(v, "▌"); n != 1 {
 		t.Fatalf("bar rows = %d, want 1", n)
 	}
-	lines := strings.Split(v, "\n")
-	if bar := strings.Index(lines[1], "▌"); bar != 0 {
-		t.Fatalf("bar column = %d, want 0 (left edge of the text area): %q", bar, lines[1])
+	for _, line := range strings.Split(v, "\n") {
+		if strings.Contains(line, "## 1. Preflight and point-of-use guards") {
+			if bar := strings.Index(line, "▌"); bar != 0 {
+				t.Fatalf("bar not on the heading's row (column %d): %q", bar, line)
+			}
+			return
+		}
 	}
+	t.Fatal("heading row not found in the view")
 }
 
 // TestSelectionKeepsTextColumn checks that selecting an entry does not

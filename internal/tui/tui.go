@@ -501,8 +501,10 @@ func (m Model) railView() string {
 		return strings.Join(rows, "\n")
 	}
 
-	// The selected heading's rendered line (1-based) as a viewport row.
-	r := m.outline.entries[m.outline.sel].renderLine - 1 - m.content.YOffset
+	// The selected heading's rendered line index (0-based in out.Lines)
+	// as a viewport row: the jump scrolls to renderLine-1, so the heading
+	// text sits one row below the top and the bar rides beside it.
+	r := m.outline.entries[m.outline.sel].renderLine - m.content.YOffset
 	if 0 <= r && r < m.content.Height {
 		rows[r] = gutterBarStyle.Render("▌")
 	}
