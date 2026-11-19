@@ -36,6 +36,9 @@ type Theme struct {
 	Success Color
 	Error   Color
 	Warning Color
+
+	// Running marks an in-flight execution in the gutter (orange).
+	Running Color
 }
 
 // Dark is the default theme.
@@ -51,6 +54,7 @@ var Dark = Theme{
 	Success:           "#6fbf73",
 	Error:             "#f05b5b",
 	Warning:           "#e2b93d",
+	Running:           "#ff9e64",
 }
 
 // Notty is the fallback for terminals without color support: every token is

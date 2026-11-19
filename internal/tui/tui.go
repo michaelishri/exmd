@@ -684,14 +684,29 @@ func (m Model) railView() string {
 	}
 
 	// Block selection: the bar spans the code block itself — starting
-	// below the metadata/badge row — through its last line.
+	// below the metadata/badge row — through its last line. Its color
+	// reflects the block's execution state: orange while running, green
+	// on success, red on failure, primary otherwise.
 	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
+		barStyle := gutterBarStyle
+		if m.inline.index == m.blockSel {
+			switch {
+			case m.inline.active:
+				barStyle = railRunStyle
+			case m.inline.done:
+				if m.inline.err != nil || m.inline.status != 0 {
+					barStyle = railFailStyle
+				} else {
+					barStyle = railDoneStyle
+				}
+			}
+		}
 		bm := m.out.Blocks[m.blockSel]
 		start := m.displayLine(bm.Line+1) - m.content.YOffset + 1
 		end := m.displayLine(bm.End) - m.content.YOffset + 1
 		for r := 0; r < m.paneHeight; r++ {
 			if r >= start && r < end {
-				rows[r] = gutterBarStyle.Render("▌")
+				rows[r] = barStyle.Render("▌")
 			}
 		}
 		return strings.Join(rows, "\n")

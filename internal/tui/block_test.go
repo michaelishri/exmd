@@ -162,6 +162,10 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	if got.mode != modeView {
 		t.Fatal("inline execution should stay in the document view")
 	}
+	// While running, the gutter bar is orange.
+	if !strings.Contains(got.View(), railRunStyle.Render("▌")) {
+		t.Fatal("running block's rail should be orange")
+	}
 	got = pump(t, got, cmd)
 
 	if !got.inline.done {
@@ -208,5 +212,40 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	last := lines[bm.End+len(got.inline.box)-1]
 	if strings.TrimSpace(ansi.Strip(last)) != "" {
 		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
+	}
+	// On success, the rail turns green.
+	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
+		t.Fatal("successful block's rail should be green")
+	}
+}
+
+// TestInlineFailureRailTurnsRed checks that a failing inline run marks the
+// block's gutter bar red.
+func TestInlineFailureRailTurnsRed(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewerFromDoc(t, 120, 40, "../../internal/exec/testdata/fail.md", nil)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	got := mm.(Model)
+	// The whole short document fits on screen, so the spy starts at the
+	// last heading; move to the first one explicitly.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	got = mm.(Model)
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got = mm.(Model)
+	// Down to the second block, which exits non-zero.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	got = mm.(Model)
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = mm.(Model)
+	got = pump(t, got, cmd)
+
+	if got.inline.status == 0 {
+		t.Fatalf("expected a failing block, status = %d", got.inline.status)
+	}
+	if !strings.Contains(got.View(), railFailStyle.Render("▌")) {
+		t.Fatal("failed block's rail should be red")
 	}
 }

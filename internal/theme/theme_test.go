@@ -55,6 +55,7 @@ func TestNottyTokensEmpty(t *testing.T) {
 			"Success":           th.Success,
 			"Error":             th.Error,
 			"Warning":           th.Warning,
+			"Running":           th.Running,
 		} {
 			if c != "" {
 				t.Errorf("Notty.%s = %q, want empty", name, c)

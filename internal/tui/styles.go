@@ -42,8 +42,11 @@ var (
 	rowHiStyle lipgloss.Style
 
 	// gutterBarStyle colors the selection rail at the left edge of the
-	// text area.
+	// text area; the three state styles color it while a block executes.
 	gutterBarStyle lipgloss.Style
+	railRunStyle   lipgloss.Style
+	railDoneStyle  lipgloss.Style
+	railFailStyle  lipgloss.Style
 
 	// sideBorderStyle draws the sidebar's left border line — always
 	// primary; focus is expressed by the strip's background lift.
@@ -125,6 +128,12 @@ func buildStyles() {
 
 	gutterBarStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
+	railRunStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Running))
+	railDoneStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Success))
+	railFailStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Error))
 
 	// sideBorderStyle draws the sidebar's focus border: a single primary
 	// line along the strip's left edge.
