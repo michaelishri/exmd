@@ -179,10 +179,17 @@ func (o *outlineModel) view(height int, focused bool) string {
 
 	top := 3 // pad + title + pad
 	bottomPad := 1
-	visible := height - top - bottomPad
-	if visible < 1 {
-		visible = 1
+	// Every heading row gets an empty line after it — like the title row —
+	// so the list breathes: each entry occupies two rows (entry + blank).
+	const entryGap = 1
+	slots := (height-top-bottomPad+1)/(entryGap+1) + 1
+	if len(o.entries) < slots {
+		slots = len(o.entries)
 	}
+	if slots < 1 {
+		slots = 1
+	}
+	visible := slots
 	start := 0
 	if len(o.entries) > visible {
 		start = o.sel - visible/2
@@ -204,7 +211,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 	}
 	pad := strings.Repeat(" ", panePad)
 	for r := 0; r < visible; r++ {
-		row := top + r
+		row := top + r*(entryGap+1)
 		if row >= height-bottomPad {
 			break
 		}
