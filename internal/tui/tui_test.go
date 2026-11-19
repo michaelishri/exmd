@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/md-exec/internal/doc"
 )
@@ -46,13 +47,9 @@ func TestViewerLayout(t *testing.T) {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()
-	// The reading surface is content + sidebar only: no header row (title,
-	// path, chips), no footer, no viewport frame.
-	if strings.Contains(v, "spec v1") || strings.Contains(v, "examples/demo/demo.md") {
+	// The reading surface has no header row or viewport frame.
+	if strings.Contains(v, "spec v1") {
 		t.Fatal("header chrome leaked into the view")
-	}
-	if strings.Contains(v, "j/k scroll") || strings.Contains(v, "q quit") {
-		t.Fatal("footer should be gone")
 	}
 	if strings.Contains(v, "┌") || strings.Contains(v, "└") {
 		t.Fatal("the viewport frame should be gone")
@@ -61,18 +58,54 @@ func TestViewerLayout(t *testing.T) {
 	if !strings.Contains(v, "md-exec feature tour") {
 		t.Fatal("document content missing")
 	}
-	// The panes float: one blank row above and below the body.
+	// Footer: a hairline, context-aware hints on the left, file path right.
 	lines := strings.Split(v, "\n")
-	if strings.TrimSpace(lines[0]) != "" || strings.TrimSpace(lines[len(lines)-1]) != "" {
-		t.Fatalf("missing blank margin rows: first=%q last=%q", lines[0], lines[len(lines)-1])
+	if strings.TrimSpace(lines[0]) != "" {
+		t.Fatalf("missing top margin row: %q", lines[0])
 	}
-	// Viewer viewport: the pane height minus the content's two padding
-	// rows; the panes themselves span the full pane height.
-	if m.content.Height != 36 {
-		t.Fatalf("viewer viewport height = %d, want 36", m.content.Height)
+	if !strings.HasPrefix(ansi.Strip(lines[len(lines)-2]), "─") {
+		t.Fatalf("no footer separator: %q", lines[len(lines)-2])
 	}
-	if m.paneHeight != 38 {
-		t.Fatalf("pane height = %d, want 38", m.paneHeight)
+	footer := ansi.Strip(lines[len(lines)-1])
+	if !strings.Contains(footer, "j/k scroll") || !strings.Contains(footer, "examples/demo/demo.md") {
+		t.Fatalf("footer missing hints or path: %q", footer)
+	}
+	// Viewer viewport: pane height minus the content's two padding rows.
+	if m.content.Height != 35 {
+		t.Fatalf("viewer viewport height = %d, want 35", m.content.Height)
+	}
+	if m.paneHeight != 37 {
+		t.Fatalf("pane height = %d, want 37", m.paneHeight)
+	}
+}
+
+func TestFooterIsContextAware(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	footer := func(m Model) string {
+		lines := strings.Split(m.View(), "\n")
+		return ansi.Strip(lines[len(lines)-1])
+	}
+
+	// Viewer: scrolling hints.
+	if f := footer(m); !strings.Contains(f, "j/k scroll") ||
+		!strings.Contains(f, "examples/demo/demo.md") {
+		t.Fatalf("viewer footer = %q", f)
+	}
+
+	// Outline focus: navigation + jump hints.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mm.(Model)
+	if f := footer(m); !strings.Contains(f, "j/k navigate") ||
+		!strings.Contains(f, "enter jump") {
+		t.Fatalf("outline footer = %q", f)
+	}
+
+	// Block mode: block navigation + run hints.
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
+	m = mm.(Model)
+	if f := footer(m); !strings.Contains(f, "j/k blocks") ||
+		!strings.Contains(f, "r run") {
+		t.Fatalf("block footer = %q", f)
 	}
 }
 

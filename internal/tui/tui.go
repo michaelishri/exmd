@@ -405,9 +405,12 @@ func (m *Model) relayout() {
 	}
 	contentW = max(10, contentW)
 
-	// Viewer: one blank row above and below the panes. Run mode: the
-	// hairline + status bar.
+	// Viewer: one blank row above the panes, then a hairline + footer.
+	// Run mode: the hairline + run status bar.
 	chrome := 2
+	if m.mode == modeView {
+		chrome = 3
+	}
 	bodyH := max(1, h-chrome)
 	m.paneHeight = bodyH
 
@@ -620,12 +623,38 @@ func (m Model) View() string {
 		sb.WriteString(m.runStatus())
 		return sb.String()
 	}
-	// The viewer floats the panes with one blank row above and below; the
-	// sidebar's left border marks its focus.
+	// The viewer floats the panes with a blank row above, then a hairline
+	// and footer: context-aware shortcuts on the left, file path on the
+	// right.
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
 	sb.WriteByte('\n')
+	sb.WriteString(m.sepView())
+	sb.WriteByte('\n')
+	sb.WriteString(m.footerView())
 	return sb.String()
+}
+
+// footerView is the bottom line: shortcuts for the current context on the
+// left, the runbook's file path on the right.
+func (m Model) footerView() string {
+	return composeLeftRight(m.keyHints(), infoStyle.Render(m.doc.Path), m.width)
+}
+
+// keyHints reports only the keys relevant to the current context.
+func (m Model) keyHints() string {
+	var hints []string
+	switch {
+	case m.inlineActive():
+		hints = []string{"s stop", "q quit"}
+	case m.blockSel >= 0:
+		hints = []string{"j/k blocks", "r run", "s stop", "esc back", "q quit"}
+	case m.focus == focusOutline:
+		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "q quit"}
+	default:
+		hints = []string{"j/k scroll", "tab outline", "` blocks", "r run", "q quit"}
+	}
+	return infoStyle.Render(strings.Join(hints, " · "))
 }
 
 func (m Model) bodyView() string {
