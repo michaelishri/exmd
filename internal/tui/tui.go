@@ -358,14 +358,16 @@ func (m *Model) relayout() {
 }
 
 // jumpToSelected scrolls the content so the selected sidebar entry sits at
-// the top of the viewport.
+// the top of the viewport. It is cursor-driven: the scroll-spy must not
+// re-derive the selection from the resulting scroll position (near the
+// document's end the viewport pins at the bottom, which would otherwise
+// snap the cursor to the last entry).
 func (m *Model) jumpToSelected() {
 	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
 		return
 	}
 	y := clamp(m.outline.entries[m.outline.sel].renderLine-1, 0, m.maxScroll())
 	m.content.SetYOffset(y)
-	m.updateSpy()
 }
 
 func (m *Model) maxScroll() int {

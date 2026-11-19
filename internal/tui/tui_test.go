@@ -129,6 +129,34 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 	}
 }
 
+// TestListWalkNoSnapping walks the sidebar entry by entry and asserts the
+// cursor advances exactly one step per keypress. Near the document's end
+// the content viewport pins at the bottom; the scroll-spy must not
+// override cursor-driven moves and snap the selection to the last entry.
+func TestListWalkNoSnapping(t *testing.T) {
+	m := newViewer(t, 120, 60)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	got := mm.(Model)
+	prev := got.outline.sel
+	for i := 0; i < len(got.outline.entries); i++ {
+		mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		got = mm.(Model)
+		if got.outline.sel != prev+1 {
+			t.Fatalf("step %d: sel = %d, want %d (cursor snapped)", i, got.outline.sel, prev+1)
+		}
+		prev = got.outline.sel
+	}
+	// One past the end: the cursor stays.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got = mm.(Model)
+	if got.outline.sel != len(got.outline.entries)-1 {
+		t.Fatalf("sel past the end = %d, want %d", got.outline.sel, len(got.outline.entries)-1)
+	}
+}
+
+// TestViewerSpyFollowsScroll checks the scroll-driven direction of the
+// unified cursor: scrolling the content to the bottom highlights the last
+// entry (the first h1 is the title row and is not among the entries).
 func TestViewerSpyFollowsScroll(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
