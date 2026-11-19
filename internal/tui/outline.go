@@ -66,6 +66,9 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 				break
 			}
 			label := h.Text
+			if n := out.Headings[i].Number; n != "" {
+				label = n + " " + label
+			}
 			if strings.TrimSpace(label) == "" {
 				label = "(untitled)"
 			}

@@ -309,8 +309,8 @@ More text after the h1.
 	}
 	// The h1 is the title row (selectable via sel == -1), not an entry:
 	// only the h2 remains in the entries list.
-	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "An h2 comes first" {
-		t.Fatalf("entries = %+v, want only the h2", m.outline.entries)
+	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "1. An h2 comes first" {
+		t.Fatalf("entries = %+v, want only the numbered h2", m.outline.entries)
 	}
 	v := m.outline.view(m.paneHeight, false)
 	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
