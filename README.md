@@ -78,6 +78,11 @@ and status indicator as you move through the document. Drag with the mouse in
 the text pane to select any on-screen text; releasing copies the selection to
 the clipboard as plain text.
 
+Headings that don't already start with a number are numbered automatically in
+both the viewer and `exmd print` — `1.`, `1.1.`, and so on. A document whose
+headings already carry numbers (like `demo.md`) is displayed exactly as
+written.
+
 Because the spec mandates no particular interface, nothing prevents other conforming
 runners from executing runbooks headless (CI, pipelines) — the reference tool simply
 optimizes for human use.

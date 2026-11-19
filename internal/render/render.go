@@ -22,7 +22,8 @@ import (
 // HeadingMark is the rendered line at which a heading starts. Index i
 // corresponds to Document.Headings[i].
 type HeadingMark struct {
-	Line int // 0-based rendered line index
+	Line   int    // 0-based rendered line index
+	Number string // generated heading number ("1.1."), "" when none
 }
 
 // BlockMark is the rendered line at which an executable block's badge sits.
@@ -54,6 +55,7 @@ func Render(d *doc.Document, width int, color bool) *Output {
 		width = DefaultWidth
 	}
 	out := &Output{Width: width}
+	numbers := headingNumbers(d)
 
 	bounds := boundaries(d)
 	srcLines := strings.Split(string(d.Source), "\n")
@@ -97,8 +99,12 @@ func Render(d *doc.Document, width int, color bool) *Output {
 
 		switch {
 		case b.heading >= 0:
-			out.Headings = append(out.Headings, HeadingMark{Line: len(out.Lines)})
-			out.appendGlamour(chunk, renderer)
+			number := numbers[b.heading]
+			out.Headings = append(out.Headings, HeadingMark{
+				Line:   len(out.Lines),
+				Number: number,
+			})
+			out.appendGlamour(prefixHeadingNumber(chunk, number), renderer)
 		case b.block >= 0:
 			blk := d.Blocks[b.block]
 			out.Blocks = append(out.Blocks, BlockMark{
