@@ -683,46 +683,46 @@ func (m Model) railView() string {
 		return strings.Join(rows, "\n")
 	}
 
-	// Block selection: the bar spans the code block itself — starting
-	// below the metadata/badge row — through its last line. Its color
-	// reflects the block's execution state: orange while running, green
-	// on success, red on failure, primary otherwise.
-	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
-		barStyle := gutterBarStyle
-		if m.inline.index == m.blockSel {
-			switch {
-			case m.inline.active:
-				barStyle = railRunStyle
-			case m.inline.done:
-				if m.inline.err != nil || m.inline.status != 0 {
-					barStyle = railFailStyle
-				} else {
-					barStyle = railDoneStyle
-				}
+	mark := func(start, end int, style lipgloss.Style) {
+		for r := start; r < end; r++ {
+			if r >= 0 && r < m.paneHeight {
+				rows[r] = style.Render("▌")
 			}
 		}
-		bm := m.out.Blocks[m.blockSel]
+	}
+	blockRows := func(index int) (int, int) {
+		bm := m.out.Blocks[index]
 		start := m.displayLine(bm.Line+1) - m.content.YOffset + 1
-		end := m.displayLine(bm.End) - m.content.YOffset + 1
-		for r := 0; r < m.paneHeight; r++ {
-			if r >= start && r < end {
-				rows[r] = barStyle.Render("▌")
-			}
+		return start, m.displayLine(bm.End) - m.content.YOffset + 1
+	}
+
+	// The selection bar: the highlighted block, or the heading the
+	// scroll-spy is on. Drawn first so the execution status bar below
+	// takes precedence when the two overlap.
+	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
+		start, end := blockRows(m.blockSel)
+		mark(start, end, gutterBarStyle)
+	} else if m.outline.sel >= 0 && m.outline.sel < len(m.outline.entries) {
+		// The heading's rendered line index (0-based in out.Lines) as a
+		// pane row: the jump scrolls to renderLine-1, and the pane's top
+		// padding row shifts it one further.
+		r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset + 1
+		mark(r, r+1, gutterBarStyle)
+	}
+
+	// The executed block keeps its status bar — orange while running,
+	// green on success, red on failure — as the reader moves elsewhere.
+	if m.inline.index >= 0 && m.inline.index < len(m.out.Blocks) &&
+		(m.inline.active || m.inline.done) {
+		style := railDoneStyle
+		switch {
+		case m.inline.active:
+			style = railRunStyle
+		case m.inline.err != nil || m.inline.status != 0:
+			style = railFailStyle
 		}
-		return strings.Join(rows, "\n")
-	}
-
-	if m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
-		return strings.Join(rows, "\n")
-	}
-
-	// The selected heading's rendered line index (0-based in out.Lines)
-	// as a pane row: the jump scrolls to renderLine-1, so the heading text
-	// sits one row below the viewport top — and the pane's padding row
-	// shifts it one further.
-	r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset + 1
-	if 0 <= r && r < m.paneHeight {
-		rows[r] = gutterBarStyle.Render("▌")
+		start, end := blockRows(m.inline.index)
+		mark(start, end, style)
 	}
 	return strings.Join(rows, "\n")
 }

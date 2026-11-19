@@ -217,6 +217,22 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
 		t.Fatal("successful block's rail should be green")
 	}
+
+	// Moving the selection elsewhere leaves both the output and the
+	// executed block's status bar in place.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	got = mm.(Model)
+	if !strings.Contains(strings.Join(got.contentLines(), "\n"), "author:  Michael Ishri") {
+		t.Fatal("output disappeared when moving to another block")
+	}
+	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
+		t.Fatal("status bar disappeared when moving to another block")
+	}
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	got = mm.(Model)
+	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
+		t.Fatal("status bar disappeared when returning to heading selection")
+	}
 }
 
 // TestInlineFailureRailTurnsRed checks that a failing inline run marks the
