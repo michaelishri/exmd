@@ -64,7 +64,9 @@ code blocks in its section; **`r`** runs the highlighted block *in place*, with
 its output streaming into the document beneath it. Arrows walk between blocks,
 **`c`** copies the focused block's output to the clipboard as plain text (via
 OSC 52), **`s`** stops a running block, and each executed block keeps its output
-and status indicator as you move through the document.
+and status indicator as you move through the document. Drag with the mouse in
+the text pane to select any on-screen text; releasing copies the selection to
+the clipboard as plain text.
 
 Because the spec mandates no particular interface, nothing prevents other conforming
 runners from executing runbooks headless (CI, pipelines) — the reference tool simply

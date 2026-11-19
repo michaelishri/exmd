@@ -80,6 +80,9 @@ type Model struct {
 	// flash is a short-lived reaction shown in the footer, e.g. after a
 	// copy. The next key press clears it.
 	flash string
+
+	// sel is the active mouse text selection in the content pane.
+	sel textSelection
 }
 
 // New builds the model for a loaded document; overrides are launch-time
@@ -126,6 +129,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
+		if m.handleMouse(msg) {
+			return m, nil
+		}
+		// Wheel events belong to the viewport; everything else is ignored.
 		prev := m.content.YOffset
 		m.content, _ = m.content.Update(msg)
 		if m.content.YOffset != prev {
@@ -144,6 +151,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// handleMouse drives text selection with the left button. It reports whether
+// the event was consumed; wheel events fall through to the viewport.
+func (m *Model) handleMouse(msg tea.MouseMsg) bool {
+	if tea.MouseEvent(msg).IsWheel() {
+		return false
+	}
+	switch {
+	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
+		if p, ok := m.mousePoint(msg); ok {
+			m.sel.anchor, m.sel.head = p, p
+			m.sel.set, m.sel.dragging = true, true
+		} else {
+			m.sel.clear()
+		}
+		m.setContent()
+		return true
+
+	case m.sel.dragging && msg.Action == tea.MouseActionMotion:
+		// Some terminals report a drag as a release event (see below).
+		if p, ok := m.mousePoint(msg); ok {
+			m.sel.head = p
+			m.setContent()
+		}
+		return true
+
+	case msg.Action == tea.MouseActionRelease && m.sel.dragging:
+		// A release can carry the final pointer position.
+		if p, ok := m.mousePoint(msg); ok {
+			m.sel.head = p
+		}
+		m.sel.dragging = false
+		if from, to, ok := m.sel.ordered(); ok {
+			if text := selectionText(m.rawContentLines(), from, to); text != "" {
+				if err := copyToClipboard(text); err != nil {
+					m.flash = "copy failed: " + err.Error()
+				} else {
+					lines := to.line - from.line + 1
+					noun := "lines"
+					if lines == 1 {
+						noun = "line"
+					}
+					m.flash = fmt.Sprintf("copied %d %s from selection", lines, noun)
+				}
+			}
+		}
+		m.sel.clear()
+		m.setContent()
+		return true
+	}
+	return false
 }
 
 // handleKey dispatches a key to the global, outline or block handler. It
@@ -188,6 +247,12 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "v", "esc":
+		if m.sel.set {
+			// Cancel a text selection or an in-progress drag first.
+			m.sel.clear()
+			m.setContent()
+			return nil, true
+		}
 		if m.blockSel >= 0 {
 			// Leave block selection. The heading is highlighted again.
 			m.exitBlockMode()
@@ -336,6 +401,11 @@ func (m *Model) relayout() {
 	w, h := m.width, m.height
 	if w <= 0 || h <= 0 {
 		return
+	}
+	// Rendered lines change with the width, so absolute selection points
+	// no longer refer to the same text.
+	if m.laidOut {
+		m.sel.clear()
 	}
 
 	m.outline.visible = w >= minSidebarWidth
@@ -587,7 +657,7 @@ func (m Model) keyHints() string {
 	case m.focus == focusOutline:
 		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "q quit"}
 	default:
-		hints = []string{"j/k scroll", "tab outline", "` blocks", "r run", "q quit"}
+		hints = []string{"j/k scroll", "drag copy", "tab outline", "` blocks", "r run", "q quit"}
 	}
 	return infoStyle.Render(strings.Join(hints, " · "))
 }
@@ -728,9 +798,9 @@ func (m *Model) updateShifts() {
 	m.shifts = shifts
 }
 
-// contentLines returns the rendered document with the inline output box
-// inserted at the end of the executing block.
-func (m Model) contentLines() []string {
+// rawContentLines returns the rendered document with the inline output box
+// inserted at the end of the executing block, without selection styling.
+func (m Model) rawContentLines() []string {
 	if m.out == nil {
 		return nil
 	}
@@ -739,6 +809,27 @@ func (m Model) contentLines() []string {
 	for i, l := range m.out.Lines {
 		out = append(out, l)
 		out = append(out, inserts[i]...)
+	}
+	return out
+}
+
+// contentLines returns what the viewport shows: the document plus the
+// highlighted span of an active mouse selection.
+func (m Model) contentLines() []string {
+	out := m.rawContentLines()
+	from, to, ok := m.sel.ordered()
+	if !ok {
+		return out
+	}
+	for line := from.line; line <= to.line && line < len(out); line++ {
+		lo, hi := 0, ansi.StringWidth(out[line])
+		if line == from.line {
+			lo = from.col
+		}
+		if line == to.line {
+			hi = to.col
+		}
+		out[line] = highlightSelection(out[line], lo, hi)
 	}
 	return out
 }
