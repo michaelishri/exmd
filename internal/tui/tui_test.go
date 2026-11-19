@@ -119,9 +119,9 @@ func TestViewerNarrowHidesSidebar(t *testing.T) {
 func TestViewerFocusAndNavigation(t *testing.T) {
 	m := newViewer(t, 120, 40)
 
-	// Above the first heading the unified cursor rests on no entry: the
-	// h1 is the title row and is not selectable. Tab focuses the sidebar,
-	// j moves to the next section and jumps the content to it.
+	// Above the first heading the unified cursor rests on the title row
+	// (sel == -1). Tab focuses the sidebar, j moves to the next section and
+	// jumps the content to it.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got := mm.(Model)
 	if got.focus != focusOutline {
@@ -141,11 +141,15 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 		t.Fatalf("YOffset = %d, want %d", got.content.YOffset, wantY)
 	}
 
-	// k at the first entry stays put.
+	// k at the first entry moves up onto the title row and returns to the
+	// very top of the document.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	got = mm.(Model)
-	if got.outline.sel != 0 {
-		t.Fatalf("sel after k = %d, want 0", got.outline.sel)
+	if got.outline.sel != -1 {
+		t.Fatalf("sel after k = %d, want -1 (title)", got.outline.sel)
+	}
+	if got.content.YOffset != 0 {
+		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset)
 	}
 
 	// t switches to the Blocks tab.

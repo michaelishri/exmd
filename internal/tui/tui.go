@@ -333,7 +333,7 @@ func (m *Model) relayout() {
 	if m.blockSel >= 0 {
 		m.revealBlock()
 	} else if m.laidOut && len(m.outline.entries) > 0 {
-		sel := clamp(m.outline.sel, 0, len(m.outline.entries)-1)
+		sel := clamp(m.outline.sel, -1, len(m.outline.entries)-1)
 		m.outline.sel = sel
 		m.jumpToSelected()
 	} else {
@@ -349,7 +349,15 @@ func (m *Model) relayout() {
 // document's end the viewport pins at the bottom, which would otherwise
 // snap the cursor to the last entry).
 func (m *Model) jumpToSelected() {
-	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
+	if m.out == nil {
+		return
+	}
+	if m.outline.sel < 0 {
+		// The title row: jump to the very top of the document.
+		m.content.SetYOffset(0)
+		return
+	}
+	if m.outline.sel >= len(m.outline.entries) {
 		return
 	}
 	y := clamp(m.displayLine(m.outline.entries[m.outline.sel].renderLine)-1, 0, m.maxScroll())

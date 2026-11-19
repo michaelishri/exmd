@@ -41,10 +41,10 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 		t.Fatalf("pad row missing under the title: %q", lines[2])
 	}
 
-	// The entries sit below the pads: the first h1 is the title row and is
-	// not a selectable entry, so the outline starts with the next heading.
-	// Nothing is selected while the reader is in the h1's section, so the
-	// first entry row has no marker yet.
+	// The entries sit below the pads: the first h1 is the title row (itself
+	// selectable via sel == -1), so the entries list starts with the next
+	// heading. At the top of the document the title holds the cursor, so
+	// the first entry row carries no marker yet.
 	n := len(m.outline.entries)
 	if n < 2 {
 		t.Fatalf("demo should have several headings, got %d", n)
@@ -202,9 +202,10 @@ func cellAt(s string, col int) string {
 }
 
 // TestSidebarFocusShading checks the resting-to-focused lift: while the
-// sidebar rests its rows carry no background at all (they blend into the
-// page like the text area) and its border line is muted chrome; focus
-// lifts the rows onto the panel background; the border stays muted.
+// sidebar rests, its entry rows carry no background at all (they blend into
+// the page like the text area) and its border line is muted chrome; focus
+// lifts them onto the panel background; the border stays muted. (The title
+// row is excluded: at the top of the document it holds the cursor.)
 // TrueColor is forced so the exact colors are assertable.
 func TestSidebarFocusShading(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
@@ -281,8 +282,8 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 }
 
 // TestOutlineTitleIsFirstH1 checks that the sidebar title is the document's
-// first level-1 heading even when it is not the first body line, and that
-// the title is not a selectable entry.
+// first level-1 heading even when it is not the first body line. The title
+// is its own selectable row (sel == -1), separate from the heading entries.
 func TestOutlineTitleIsFirstH1(t *testing.T) {
 	src := `---
 type: runbook
@@ -306,13 +307,71 @@ More text after the h1.
 	if m.outline.title != "The Real Title" {
 		t.Fatalf("sidebar title = %q, want the first h1 %q", m.outline.title, "The Real Title")
 	}
-	// The h1 is the title, not an entry: only the h2 remains.
+	// The h1 is the title row (selectable via sel == -1), not an entry:
+	// only the h2 remains in the entries list.
 	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "An h2 comes first" {
 		t.Fatalf("entries = %+v, want only the h2", m.outline.entries)
 	}
 	v := m.outline.view(m.paneHeight, false)
 	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
+	}
+}
+
+// TestTitleRowIsSelectable checks that the title row can hold the sidebar
+// cursor and that selecting it scrolls to the very top of the document.
+func TestTitleRowIsSelectable(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	// Focus the sidebar and pick the first heading, scrolling off the top.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got := mm.(Model)
+	if got.outline.sel != 0 || got.content.YOffset == 0 {
+		t.Fatalf("setup: sel = %d, YOffset = %d; want first heading, scrolled down",
+			got.outline.sel, got.content.YOffset)
+	}
+	unselected := strings.Split(got.outline.view(got.paneHeight, false), "\n")[1]
+
+	// Moving up from the first entry lands on the title and jumps home.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	got = mm.(Model)
+	if got.outline.sel != -1 {
+		t.Fatalf("sel after k = %d, want -1 (title)", got.outline.sel)
+	}
+	if got.content.YOffset != 0 {
+		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset)
+	}
+	selected := strings.Split(got.outline.view(got.paneHeight, false), "\n")[1]
+	if ansi.Strip(selected) != ansi.Strip(unselected) {
+		t.Fatalf("selection shifted the title text: %q -> %q",
+			ansi.Strip(unselected), ansi.Strip(selected))
+	}
+	if selected == unselected {
+		t.Fatal("the selected title row should carry a different background")
+	}
+
+	// g selects the title from anywhere else in the outline, too.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	got = mm.(Model)
+	if got.outline.sel != len(got.outline.entries)-1 {
+		t.Fatalf("G did not reach the last entry: sel = %d", got.outline.sel)
+	}
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	got = mm.(Model)
+	if got.outline.sel != -1 || got.content.YOffset != 0 {
+		t.Fatalf("g: sel = %d, YOffset = %d; want title at the top",
+			got.outline.sel, got.content.YOffset)
+	}
+
+	// Down from the title returns to the first entry.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	got = mm.(Model)
+	if got.outline.sel != 0 {
+		t.Fatalf("j from the title = %d, want 0", got.outline.sel)
 	}
 }
 

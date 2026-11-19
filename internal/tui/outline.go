@@ -98,14 +98,16 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	}
 }
 
-// move shifts the cursor and reports whether anything changed.
+// move shifts the cursor and reports whether anything changed. Index -1 is
+// the title row: it sits above the first entry and takes the reader to the
+// very top of the document, so moving up from the first entry lands there.
 func (o *outlineModel) move(delta int) bool {
 	if len(o.entries) == 0 {
 		return false
 	}
 	n := o.sel + delta
-	if n < 0 {
-		n = 0
+	if n < -1 {
+		n = -1
 	}
 	if n >= len(o.entries) {
 		n = len(o.entries) - 1
@@ -117,11 +119,12 @@ func (o *outlineModel) move(delta int) bool {
 	return true
 }
 
+// first selects the title row, the very top of the outline.
 func (o *outlineModel) first() bool {
-	if o.sel == 0 || len(o.entries) == 0 {
+	if o.sel == -1 {
 		return false
 	}
-	o.sel = 0
+	o.sel = -1
 	return true
 }
 
@@ -171,11 +174,18 @@ func (o *outlineModel) view(height int, focused bool) string {
 		}
 	}
 
-	// Title row: the document's first h1, two columns in.
+	// Title row: the document's first h1, two columns in. It doubles as
+	// the topmost selectable row (sel == -1): when the cursor is on it,
+	// it carries the selection background like any other row, and the
+	// content scrolls to the very top.
 	const titleRow = 1
 	const titlePad = 2
-	setRow(titleRow, titleBg.Width(o.width).Render(
-		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
+	titleText := strings.Repeat(" ", titlePad) + ansi.Truncate(o.title, o.width-titlePad-1, "…")
+	if o.sel < 0 {
+		setRow(titleRow, selRowStyle.Width(o.width).Render(titleText))
+	} else {
+		setRow(titleRow, titleBg.Width(o.width).Render(titleText))
+	}
 
 	top := 3 // pad + title + pad
 	bottomPad := 1
