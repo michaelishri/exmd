@@ -440,8 +440,15 @@ func (m Model) View() string {
 		sb.WriteString(m.runStatus())
 		return sb.String()
 	}
-	// The viewer frames the viewport: the former margin rows are the
-	// border's top and bottom lines, colored by focus.
+	// The viewer frames the viewport while the text area holds focus —
+	// the frame is the text area's border. With the sidebar focused the
+	// frame disappears entirely: the sidebar's own border marks the focus.
+	if m.focus == focusOutline {
+		sb.WriteByte('\n')
+		sb.WriteString(m.bodyView())
+		sb.WriteByte('\n')
+		return sb.String()
+	}
 	sb.WriteString(m.frameTop())
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
@@ -501,9 +508,9 @@ func (m Model) bodyView() string {
 	if !m.outline.visible {
 		return content
 	}
+	side := make([]string, m.content.Height)
 	gutter := make([]string, m.content.Height)
 	margin := make([]string, m.content.Height)
-	side := make([]string, m.content.Height)
 	focused := m.focus == focusOutline
 	for i := range gutter {
 		switch {
@@ -522,7 +529,11 @@ func (m Model) bodyView() string {
 			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
 			margin[i] = sideBorderStyle.Render("│")
 		}
-		side[i] = m.frameSideRow()
+		if focused {
+			side[i] = " "
+		} else {
+			side[i] = m.frameSideRow()
+		}
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		strings.Join(side, "\n"),

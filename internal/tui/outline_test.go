@@ -114,25 +114,39 @@ func TestRailMarksHeadingLine(t *testing.T) {
 }
 
 // TestFocusBorderMoves checks the focus representation: with the text area
-// focused there is exactly one box (the viewport frame); tab moves focus to
-// the sidebar, which gains its own border (a second box); tab back removes
-// it.
+// focused the viewport frame is present (primary); tab moves focus to the
+// sidebar — the viewport frame disappears entirely and only the sidebar's
+// own border remains; tab back restores the frame.
 func TestFocusBorderMoves(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	if n := strings.Count(m.View(), "┌"); n != 1 {
-		t.Fatalf("boxes = %d, want 1 (viewport frame only)", n)
+	v := m.View()
+	if n := strings.Count(v, "┌"); n != 1 {
+		t.Fatalf("boxes = %d, want 1 (viewport frame)", n)
 	}
 
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got := mm.(Model)
-	if n := strings.Count(got.View(), "┌"); n != 2 {
-		t.Fatalf("boxes after tab = %d, want 2 (frame + sidebar border)", n)
+	v = got.View()
+	if n := strings.Count(v, "┌"); n != 1 {
+		t.Fatalf("boxes after tab = %d, want 1 (sidebar border only)", n)
+	}
+	lines := strings.Split(v, "\n")
+	if strings.HasPrefix(ansi.Strip(lines[0]), "┌") {
+		t.Fatal("the viewport frame should be gone with the sidebar focused")
+	}
+	if !strings.Contains(ansi.Strip(lines[1]), "┌") {
+		t.Fatal("the sidebar border should be present")
 	}
 
+	// Tab back: the viewport frame returns.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got = mm.(Model)
-	if n := strings.Count(got.View(), "┌"); n != 1 {
+	v = got.View()
+	if n := strings.Count(v, "┌"); n != 1 {
 		t.Fatalf("boxes after tab back = %d, want 1", n)
+	}
+	if !strings.HasPrefix(ansi.Strip(strings.Split(v, "\n")[0]), "┌") {
+		t.Fatal("the viewport frame should return with the text area focused")
 	}
 }
 
