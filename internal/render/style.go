@@ -125,11 +125,11 @@ func darkStyle() gansi.StyleConfig {
 	return c
 }
 
-// Executable blocks sit one subtle step above the canvas — between the
-// theme's Background (#0e0e11) and BackgroundPanel (#18181e) — so they read
-// as a raised surface without competing with the prose.
+// Executable blocks sit just above the canvas — only a hair lighter than
+// the theme's Background (#0e0e11) — so they read as a quiet raised surface
+// without competing with the prose.
 const (
-	execR, execG, execB = 20, 20, 25
+	execR, execG, execB = 16, 16, 20
 )
 
 var (
