@@ -69,10 +69,18 @@ func TestArrowsMoveBlocks(t *testing.T) {
 	if got.blockSel != 1 {
 		t.Fatalf("blockSel after down = %d, want 1", got.blockSel)
 	}
+	if got.outline.sel != got.headingForBlock() {
+		t.Fatalf("sidebar sel = %d, want the selected block's heading %d",
+			got.outline.sel, got.headingForBlock())
+	}
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
 	got = mm.(Model)
 	if got.blockSel != 2 {
 		t.Fatalf("blockSel after down = %d, want 2", got.blockSel)
+	}
+	if got.outline.sel != got.headingForBlock() {
+		t.Fatalf("sidebar sel = %d, want the selected block's heading %d",
+			got.outline.sel, got.headingForBlock())
 	}
 
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyUp})

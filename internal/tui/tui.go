@@ -337,23 +337,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		switch msg.String() {
 		case "down", "j":
 			if m.blockSel < len(m.out.Blocks)-1 {
-				m.blockSel++
-				m.revealBlock()
+				m.selectBlock(m.blockSel + 1)
 			}
 			return nil, true
 		case "up", "k":
 			if m.blockSel > 0 {
-				m.blockSel--
-				m.revealBlock()
+				m.selectBlock(m.blockSel - 1)
 			}
 			return nil, true
 		case "g":
-			m.blockSel = 0
-			m.revealBlock()
+			m.selectBlock(0)
 			return nil, true
 		case "G":
-			m.blockSel = len(m.out.Blocks) - 1
-			m.revealBlock()
+			m.selectBlock(len(m.out.Blocks) - 1)
 			return nil, true
 		}
 	}
@@ -492,7 +488,17 @@ func (m *Model) enterBlockMode() {
 		}
 	}
 	m.focus = focusContent
+	m.selectBlock(m.blockSel)
+}
+
+// selectBlock moves the block cursor, reveals it when necessary, and keeps
+// the sidebar highlight on the heading whose section owns that block.
+func (m *Model) selectBlock(index int) {
+	m.blockSel = index
 	m.revealBlock()
+	if heading := m.headingForBlock(); heading >= 0 {
+		m.outline.sel = heading
+	}
 }
 
 // exitBlockMode leaves executable-block selection and highlights the
