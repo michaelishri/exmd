@@ -29,6 +29,14 @@ var (
 	// first h1: bright bold text on the panel background.
 	sideTitleStyle lipgloss.Style
 
+	// The sidebar's resting shades: the same surfaces on the muted panel
+	// background, used while the sidebar does not hold focus. Focus lifts
+	// the strip to the full panel color.
+	rowMutedStyle        lipgloss.Style
+	rowHiMutedStyle      lipgloss.Style
+	sideTitleMutedStyle  lipgloss.Style
+	emptyStateMutedStyle lipgloss.Style
+
 	// rowHiStyle shades top-level heading rows (h1/h2) with bright text;
 	// deeper heading levels use rowStyle's muted text.
 	rowHiStyle lipgloss.Style
@@ -109,6 +117,13 @@ func buildStyles() {
 	rowHiStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).
 		Background(lipgloss.Color(t.BackgroundPanel))
+
+	// The resting shades: identical to the focused surfaces but on the
+	// muted panel background.
+	rowMutedStyle = rowStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
+	rowHiMutedStyle = rowHiStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
+	sideTitleMutedStyle = sideTitleStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
+	emptyStateMutedStyle = emptyStateStyle.Background(lipgloss.Color(t.BackgroundPanelMuted))
 
 	gutterBarStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))

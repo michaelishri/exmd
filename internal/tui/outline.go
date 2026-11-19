@@ -142,15 +142,28 @@ const panePad = 1
 // row, the document's first h1 as the title row (two columns in), a blank
 // pad row, then the entries, with blank rows padding the bottom. The
 // layout is identical whether or not the sidebar holds focus — the focus
-// border is drawn beside the strip, in the gutter.
-func (o *outlineModel) view(height int) string {
+// border is drawn beside the strip, in the gutter. While the sidebar does
+// not hold focus the strip rests on the muted panel background; focus
+// lifts it to the full panel color.
+func (o *outlineModel) view(height int, focused bool) string {
 	if !o.visible {
 		return ""
 	}
 	rows := make([]string, height)
+
+	// The strip's surfaces: the resting (muted) shades while unfocused,
+	// the full panel shades while focused. Selected rows always render on
+	// the primary background.
+	resting, bright := rowStyle, rowHiStyle
+	titleBg, emptyBg := sideTitleStyle, emptyStateStyle
+	if !focused {
+		resting, bright = rowMutedStyle, rowHiMutedStyle
+		titleBg, emptyBg = sideTitleMutedStyle, emptyStateMutedStyle
+	}
+
 	// The whole column is painted; the bottom row stays blank.
 	for r := range rows {
-		rows[r] = rowStyle.Width(o.width).Render("")
+		rows[r] = resting.Width(o.width).Render("")
 	}
 	setRow := func(r int, s string) {
 		if 0 <= r && r < height {
@@ -161,7 +174,7 @@ func (o *outlineModel) view(height int) string {
 	// Title row: the document's first h1, two columns in.
 	const titleRow = 1
 	const titlePad = 2
-	setRow(titleRow, sideTitleStyle.Width(o.width).Render(
+	setRow(titleRow, titleBg.Width(o.width).Render(
 		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
 
 	top := 3 // pad + title + pad
@@ -186,7 +199,7 @@ func (o *outlineModel) view(height int) string {
 		if o.tab == tabBlocks {
 			empty = "no blocks"
 		}
-		setRow(top, emptyStateStyle.Width(o.width).Render(strings.Repeat(" ", panePad)+empty))
+		setRow(top, emptyBg.Width(o.width).Render(strings.Repeat(" ", panePad)+empty))
 		return strings.Join(rows, "\n")
 	}
 	pad := strings.Repeat(" ", panePad)
@@ -219,9 +232,9 @@ func (o *outlineModel) view(height int) string {
 			setRow(row, selRowStyle.Width(o.width).Render(pad+text))
 		} else {
 			// h1/h2 rows read bright; deeper heading levels stay muted.
-			rowBg := rowStyle
+			rowBg := resting
 			if o.tab == tabHeadings && e.level <= 2 {
-				rowBg = rowHiStyle
+				rowBg = bright
 			}
 			setRow(row, rowBg.Width(o.width).Render(pad+text))
 		}

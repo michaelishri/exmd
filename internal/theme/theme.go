@@ -18,9 +18,10 @@ type Theme struct {
 	// Background shades, darkest to lightest. The canvas itself is the
 	// terminal's own background; panels and elements sit one or two shades
 	// above it.
-	Background        Color
-	BackgroundPanel   Color
-	BackgroundElement Color
+	Background           Color
+	BackgroundPanel      Color
+	BackgroundPanelMuted Color
+	BackgroundElement    Color
 
 	// Border is the one hairline separator color used in the UI (above the
 	// status bar).
@@ -40,17 +41,18 @@ type Theme struct {
 
 // Dark is the default theme.
 var Dark = Theme{
-	Name:              "dark",
-	Background:        "#0e0e11",
-	BackgroundPanel:   "#18181e",
-	BackgroundElement: "#24242c",
-	Border:            "#2b2b34",
-	Text:              "#e4e4e9",
-	TextMuted:         "#87878f",
-	Primary:           "#8f8af4",
-	Success:           "#6fbf73",
-	Error:             "#f05b5b",
-	Warning:           "#e2b93d",
+	Name:                 "dark",
+	Background:           "#0e0e11",
+	BackgroundPanel:      "#18181e",
+	BackgroundPanelMuted: "#131317",
+	BackgroundElement:    "#24242c",
+	Border:               "#2b2b34",
+	Text:                 "#e4e4e9",
+	TextMuted:            "#87878f",
+	Primary:              "#8f8af4",
+	Success:              "#6fbf73",
+	Error:                "#f05b5b",
+	Warning:              "#e2b93d",
 }
 
 // Notty is the fallback for terminals without color support: every token is

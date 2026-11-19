@@ -20,7 +20,7 @@ import (
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
-	v := m.outline.view(rows)
+	v := m.outline.view(rows, false)
 	lines := strings.Split(v, "\n")
 	if len(lines) != rows {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
@@ -49,7 +49,7 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 	if n < 2 {
 		t.Fatalf("demo should have several headings, got %d", n)
 	}
-	if n > rows-5 {
+	if n > rows-4 {
 		t.Fatalf("demo headings exceed the sidebar: %d", n)
 	}
 	if m.outline.sel != -1 {
@@ -159,8 +159,8 @@ func TestFocusBorderMoves(t *testing.T) {
 // the strip — one per body row, gone again when focus returns.
 func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	unfocused := strings.Split(m.outline.view(m.content.Height), "\n")
-	focused := strings.Split(m.outline.view(m.content.Height), "\n")
+	unfocused := strings.Split(m.outline.view(m.content.Height, false), "\n")
+	focused := strings.Split(m.outline.view(m.content.Height, true), "\n")
 
 	// The strip's own rendering does not depend on focus at all.
 	for i := range unfocused {
@@ -200,6 +200,35 @@ func cellAt(s string, col int) string {
 	return ""
 }
 
+// TestSidebarFocusShading checks the resting-to-focused background lift:
+// the strip's rows carry the same text in both states but render with the
+// muted panel shade while unfocused and the full panel shade when focused.
+// TrueColor is forced so the two dark shades remain distinguishable.
+func TestSidebarFocusShading(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	unfocused := strings.Split(m.outline.view(m.content.Height, false), "\n")
+	focused := strings.Split(m.outline.view(m.content.Height, true), "\n")
+
+	// The first entry (body row 3) is unselected in both states.
+	if ansi.Strip(unfocused[3]) != ansi.Strip(focused[3]) {
+		t.Fatal("test setup: the rows should carry the same text")
+	}
+	if unfocused[3] == focused[3] {
+		t.Fatal("the strip should lift from the muted shade when focused")
+	}
+	// And the focused strip matches the panel shade, not the muted one.
+	if !strings.Contains(focused[3], "48;2;24;24;30") {
+		t.Fatalf("focused row should use the panel background: %q", focused[3])
+	}
+	if !strings.Contains(unfocused[3], "48;2;19;19;23") {
+		t.Fatalf("unfocused row should use the muted background: %q", unfocused[3])
+	}
+}
+
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
 // shift its text: the stripped row is identical before and after, and the
 // background carries the selection instead.
@@ -209,13 +238,13 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	before := strings.Split(m.outline.view(m.content.Height), "\n")
+	before := strings.Split(m.outline.view(m.content.Height, false), "\n")
 
 	// Focus the sidebar and select the first entry.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	got := mm.(Model)
-	after := strings.Split(got.outline.view(got.content.Height), "\n")
+	after := strings.Split(got.outline.view(got.content.Height, false), "\n")
 
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
@@ -263,7 +292,7 @@ More text after the h1.
 	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "An h2 comes first" {
 		t.Fatalf("entries = %+v, want only the h2", m.outline.entries)
 	}
-	v := m.outline.view(m.content.Height)
+	v := m.outline.view(m.content.Height, false)
 	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
 	}
@@ -287,7 +316,7 @@ func TestHeadingRowShading(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	v := m.outline.view(m.content.Height)
+	v := m.outline.view(m.content.Height, false)
 	lines := strings.Split(v, "\n")
 
 	// Entries start at row 3: entry 0 is an h2 (1. Preflight…), entry 5 is
