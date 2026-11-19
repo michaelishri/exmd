@@ -45,15 +45,6 @@ var (
 	// text area.
 	gutterBarStyle lipgloss.Style
 
-	// frameStyle draws the border around the entire viewport — the muted
-	// chrome color: clearly visible against the canvas without shouting.
-	// It demotes to this while the sidebar holds focus.
-	frameStyle lipgloss.Style
-
-	// focusFrameStyle is the viewport frame color while the text area
-	// holds focus: the frame is the text area's border.
-	focusFrameStyle lipgloss.Style
-
 	// sideBorderStyle draws the sidebar's left border line — always
 	// primary; focus is expressed by the strip's background lift.
 	sideBorderStyle lipgloss.Style
@@ -133,12 +124,6 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.TextMuted))
 
 	gutterBarStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary))
-
-	frameStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
-
-	focusFrameStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
 
 	// sideBorderStyle draws the sidebar's focus border: a single primary

@@ -26,7 +26,6 @@ const (
 	sidebarCols     = 50
 	gutterWidth     = 2
 	railWidth       = 1
-	frameWidth      = 1
 )
 
 type focusArea int
@@ -323,9 +322,8 @@ func (m *Model) relayout() {
 		if m.mode == modeRun {
 			contentW = w - sidebarW - gutterWidth
 		} else {
-			// 2-col gutter, 1-col rail, 1-col right margin, and the
-			// frame's two border columns.
-			contentW = w - sidebarW - gutterWidth - railWidth - 1 - 2*frameWidth
+			// 2-col gutter, 1-col rail, 1-col right margin.
+			contentW = w - sidebarW - gutterWidth - railWidth - 1
 		}
 	}
 	contentW = max(10, contentW)
@@ -453,45 +451,12 @@ func (m Model) View() string {
 		sb.WriteString(m.runStatus())
 		return sb.String()
 	}
-	// The viewer frames the viewport while the text area holds focus —
-	// the frame is the text area's border. With the sidebar focused the
-	// frame disappears entirely: the sidebar's own border marks the focus.
-	if m.focus == focusOutline {
-		sb.WriteByte('\n')
-		sb.WriteString(m.bodyView())
-		sb.WriteByte('\n')
-		return sb.String()
-	}
-	sb.WriteString(m.frameTop())
+	// The viewer floats the panes with one blank row above and below; the
+	// sidebar's left border marks its focus.
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
 	sb.WriteByte('\n')
-	sb.WriteString(m.frameBottom())
 	return sb.String()
-}
-
-// frameStyleFor picks the viewport frame color: primary while the text
-// area holds focus (the frame is the text area's border), muted otherwise.
-func (m Model) frameStyleFor() lipgloss.Style {
-	if m.mode == modeView && m.focus == focusContent {
-		return focusFrameStyle
-	}
-	return frameStyle
-}
-
-// frameTop renders the viewport frame's top line, spanning the window.
-func (m Model) frameTop() string {
-	return m.frameStyleFor().Render("┌" + strings.Repeat("─", max(1, m.width-2)) + "┐")
-}
-
-// frameBottom renders the viewport frame's bottom line.
-func (m Model) frameBottom() string {
-	return m.frameStyleFor().Render("└" + strings.Repeat("─", max(1, m.width-2)) + "┘")
-}
-
-// frameSideRow renders one row of the viewport frame's side columns.
-func (m Model) frameSideRow() string {
-	return m.frameStyleFor().Render("│")
 }
 
 func (m Model) bodyView() string {
@@ -521,29 +486,20 @@ func (m Model) bodyView() string {
 	if !m.outline.visible {
 		return content
 	}
-	side := make([]string, m.paneHeight)
 	gutter := make([]string, m.paneHeight)
 	margin := make([]string, m.paneHeight)
-	focused := m.focus == focusOutline
 	for i := range gutter {
 		// The sidebar's left border line is always primary; focus is
 		// expressed by the strip's background lift.
 		gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
 		margin[i] = " "
-		if focused {
-			side[i] = " "
-		} else {
-			side[i] = m.frameSideRow()
-		}
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
-		strings.Join(side, "\n"),
 		m.railView(),
 		m.paddedContent(),
 		strings.Join(gutter, "\n"),
 		m.outlineView(),
 		strings.Join(margin, "\n"),
-		strings.Join(side, "\n"),
 	)
 }
 

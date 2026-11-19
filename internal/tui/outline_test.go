@@ -94,15 +94,15 @@ func TestRailMarksHeadingLine(t *testing.T) {
 
 	// The jump put the heading one row below the viewport top (its blank
 	// separator row is at the top): exactly one rail bar, on the same body
-	// row as the heading's text, at the rail column. The sidebar's own
-	// border bars live further right and don't count.
+	// row as the heading's text, at the rail column (the leftmost column).
+	// The sidebar's border bars live further right and don't count.
 	v := got.View()
 	railRows := 0
 	found := false
 	for _, line := range strings.Split(v, "\n") {
 		stripped := ansi.Strip(line)
 		i := strings.Index(stripped, "▌")
-		if i < 0 || ansi.StringWidth(stripped[:i]) != railWidth {
+		if i < 0 || ansi.StringWidth(stripped[:i]) != 0 {
 			continue
 		}
 		railRows++
@@ -118,38 +118,39 @@ func TestRailMarksHeadingLine(t *testing.T) {
 	}
 }
 
-// TestFocusBorderMoves checks the focus representation: with the text area
-// focused the viewport frame is present (primary); tab moves focus to the
-// sidebar — the viewport frame disappears entirely and only the sidebar's
-// own border remains; tab back restores the frame.
+// TestFocusBorderMoves checks the border behavior across focus: the
+// sidebar's left border line is present in both states (always primary —
+// focus is expressed by the strip's background lift), and the viewport
+// frame never renders.
 func TestFocusBorderMoves(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	v := m.View()
-	if n := strings.Count(v, "┌"); n != 1 {
-		t.Fatalf("boxes = %d, want 1 (viewport frame)", n)
+	if n := strings.Count(v, "┌"); n != 0 {
+		t.Fatalf("frame boxes = %d, want 0 (no viewport frame)", n)
+	}
+	if n := strings.Count(v, "│"); n != m.paneHeight {
+		t.Fatalf("sidebar border rows = %d, want %d", n, m.paneHeight)
 	}
 
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got := mm.(Model)
 	v = got.View()
-	// Sidebar focus: the viewport frame disappears entirely; the sidebar's
-	// left border is the only remaining line (one per body row).
 	if n := strings.Count(v, "┌"); n != 0 {
-		t.Fatalf("frame boxes after tab = %d, want 0 (frame gone)", n)
+		t.Fatalf("frame boxes after tab = %d, want 0", n)
 	}
 	if n := strings.Count(v, "│"); n != got.paneHeight {
 		t.Fatalf("sidebar border rows after tab = %d, want %d", n, got.paneHeight)
 	}
 
-	// Tab back: the viewport frame returns.
+	// Tab back: the border stays, the frame stays gone.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyTab})
 	got = mm.(Model)
 	v = got.View()
-	if n := strings.Count(v, "┌"); n != 1 {
-		t.Fatalf("boxes after tab back = %d, want 1", n)
+	if n := strings.Count(v, "┌"); n != 0 {
+		t.Fatalf("frame boxes after tab back = %d, want 0", n)
 	}
-	if !strings.HasPrefix(ansi.Strip(strings.Split(v, "\n")[0]), "┌") {
-		t.Fatal("the viewport frame should return with the text area focused")
+	if n := strings.Count(v, "│"); n != got.paneHeight {
+		t.Fatalf("sidebar border rows after tab back = %d, want %d", n, got.paneHeight)
 	}
 }
 
@@ -175,7 +176,7 @@ func TestSidebarFocusKeepsLayout(t *testing.T) {
 	got := mm.(Model)
 	v := got.View()
 	lines := strings.Split(v, "\n")
-	borderCol := 1 + railWidth + m.content.Width + gutterWidth - 1
+	borderCol := railWidth + m.content.Width + gutterWidth - 1
 	for i := 1; i <= got.paneHeight; i++ {
 		stripped := ansi.Strip(lines[i])
 		if cellAt(stripped, borderCol) != "│" {
