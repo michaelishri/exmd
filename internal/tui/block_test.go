@@ -150,6 +150,10 @@ func TestEscapeReturnsToHeading(t *testing.T) {
 // in place, appending its output under the code rather than switching to
 // run mode.
 func TestRunSelectedBlockInline(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
@@ -183,5 +187,26 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(lines[bm.End+1]), "author:") {
 		t.Fatalf("output not directly under the separator: %q", ansi.Strip(lines[bm.End+1]))
+	}
+	// Output text is indented like the block's code, and the box closes
+	// with one empty row.
+	leading := func(s string) int {
+		v := ansi.Strip(s)
+		return len(v) - len(strings.TrimLeft(v, " "))
+	}
+	var codeLine string
+	for i := bm.Line + 1; i < bm.End; i++ {
+		if strings.TrimSpace(ansi.Strip(got.out.Lines[i])) != "" {
+			codeLine = got.out.Lines[i]
+			break
+		}
+	}
+	if codeLine == "" || leading(lines[bm.End+1]) != leading(codeLine) {
+		t.Fatalf("output indent %d does not match code indent %d",
+			leading(lines[bm.End+1]), leading(codeLine))
+	}
+	last := lines[bm.End+len(got.inline.box)-1]
+	if strings.TrimSpace(ansi.Strip(last)) != "" {
+		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
 	}
 }

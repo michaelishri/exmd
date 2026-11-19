@@ -179,16 +179,35 @@ func (m *Model) rebuildInlineBox() {
 	body := surface.Foreground(lipgloss.Color("#e4e4e9"))
 	w := m.content.Width
 
+	// Output text lines up with the code text above it.
+	indent := m.inlineIndent()
+	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
+
 	lines := []string{" " + edge.Render(strings.Repeat("─", w-1))}
 	for _, l := range st.lines {
-		inner := w - 1
-		if len(l) > inner {
-			l = l[:inner]
+		room := w - 1 - len(prefix)
+		if len(l) > room {
+			l = l[:room]
 		}
-		lines = append(lines, " "+body.Render(l+strings.Repeat(" ", inner-len(l))))
+		lines = append(lines, " "+body.Render(prefix+l+strings.Repeat(" ", room-len(l))))
 	}
-	if len(st.lines) == 0 && st.active {
-		lines = append(lines, " "+body.Render(strings.Repeat(" ", w-1)))
-	}
+	// Close the box with one empty row.
+	lines = append(lines, " "+body.Render(strings.Repeat(" ", w-1)))
 	st.box = lines
+}
+
+// inlineIndent returns the leading-column count of the executing block's
+// code text, so its output lines can line up with it.
+func (m Model) inlineIndent() int {
+	if m.out == nil || m.inline.index < 0 || m.inline.index >= len(m.out.Blocks) {
+		return 2
+	}
+	bm := m.out.Blocks[m.inline.index]
+	for i := bm.Line + 1; i < bm.End; i++ {
+		l := ansi.Strip(m.out.Lines[i])
+		if strings.TrimSpace(l) != "" {
+			return len(l) - len(strings.TrimLeft(l, " "))
+		}
+	}
+	return 2
 }
