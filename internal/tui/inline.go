@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,6 +13,13 @@ import (
 	"github.com/michaelishri/md-exec/internal/exec"
 	"github.com/michaelishri/md-exec/internal/render"
 )
+
+// eventChanBuffer is sized so that a synchronous test driver cannot
+// deadlock on a full channel; the live program drains concurrently.
+const eventChanBuffer = 4096
+
+// maxBlockLines caps how much output one block's inline box keeps.
+const maxBlockLines = 500
 
 // Tea messages for inline block execution. index identifies the block so
 // several runs can keep their own output and status.
@@ -44,6 +52,26 @@ type inlineState struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	session *exec.Session
+}
+
+// shutdownInline cancels any in-flight inline runs before quitting: the
+// engine terminates each process group (§4.7).
+func (m *Model) shutdownInline() {
+	for _, st := range m.inline {
+		if st == nil {
+			continue
+		}
+		if st.cancel != nil {
+			st.cancel()
+		}
+		if st.active {
+			time.Sleep(300 * time.Millisecond)
+		}
+		if st.session != nil {
+			st.session.Close()
+			st.session = nil
+		}
+	}
 }
 
 // inlineActive reports whether any block is currently executing inline.

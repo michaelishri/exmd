@@ -1,10 +1,9 @@
-// Package tui implements the md-exec viewer and run mode: the rendered
-// runbook on the left, the document outline as a shaded 50-column sidebar
-// on the right. The visual language follows the OpenCode TUI — borderless,
-// separated by background shades, color reserved for state. The viewer
-// floats the panes with one blank row above and below and a one-column
-// margin right of the sidebar; run mode keeps a status bar because it
-// carries the run state.
+// Package tui implements the md-exec viewer: the rendered runbook on the
+// left, the document outline as a shaded 50-column sidebar on the right,
+// and a footer with context-aware shortcuts and the file path. The visual
+// language follows the OpenCode TUI — borderless, separated by background
+// shades, color reserved for state. Executable blocks run in place, with
+// their output streaming into the document beneath them.
 package tui
 
 import (
@@ -35,14 +34,7 @@ const (
 	focusOutline
 )
 
-type mode int
-
-const (
-	modeView mode = iota
-	modeRun
-)
-
-// Model is the bubbletea model of the viewer and runner.
+// Model is the bubbletea model of the viewer.
 type Model struct {
 	doc  *doc.Document
 	path string
@@ -57,8 +49,6 @@ type Model struct {
 	renderErr    string
 	sidebarWidth int
 
-	mode      mode
-	run       runState
 	overrides map[string]string
 	theme     theme.Theme
 
@@ -84,12 +74,10 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		content:   viewport.New(0, 0),
 		outline:   newOutline(),
 		focus:     focusContent,
-		mode:      modeView,
 		overrides: overrides,
 		theme:     t,
 		blockSel:  -1,
 		inline:    map[int]*inlineState{},
-		run:       runState{globals: map[string]string{}},
 	}
 	m.content.MouseWheelEnabled = true
 	return m
@@ -104,24 +92,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width, msg.Height)
 		return m, nil
-
-	case runEventMsg:
-		m.applyRunEvent(msg.ev)
-		if m.run.active {
-			return m, m.listenCmd()
-		}
-		return m, nil
-
-	case runDoneMsg:
-		m.finalizeRun(msg.result, nil)
-		return m, nil
-
-	case runErrMsg:
-		m.finalizeRun(nil, msg.err)
-		return m, nil
-
-	case runClosedMsg:
-		return m, nil // drained concurrently with runDoneMsg; no-op
 
 	case inlineEventMsg:
 		m.applyInlineEvent(msg.index, msg.ev)
@@ -152,7 +122,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.mode == modeView && m.focus == focusContent {
+	if m.focus == focusContent {
 		prev := m.content.YOffset
 		var cmd tea.Cmd
 		m.content, cmd = m.content.Update(msg)
@@ -169,61 +139,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
-		m.shutdownRun()
+		m.shutdownInline()
 		return tea.Quit, true
 
 	case "r":
-		if m.run.active || m.inlineActive() {
+		if m.inlineActive() || m.blockSel < 0 {
 			return nil, true
 		}
-		if m.mode != modeRun && m.blockSel >= 0 {
-			// Execute the highlighted block in place, under the code.
-			return m.beginInlineRun(), true
-		}
-		if m.mode != modeRun {
-			if len(m.doc.Blocks) == 0 {
-				return nil, true
-			}
-			// Entering run mode always starts fresh.
-			return m.beginRun(true), true
-		}
-		// In run mode: continue remaining, or restart a finished run.
-		if m.run.finished || m.run.err != nil ||
-			(m.run.result != nil && m.run.result.Failed != nil) {
-			return m.beginRun(true), true
-		}
-		if m.run.session != nil && m.run.session.Remaining() > 0 {
-			return m.runRemainingCmd(), true
-		}
-		return nil, true
-
-	case "n":
-		if m.run.active {
-			return nil, true
-		}
-		if m.mode != modeRun {
-			if len(m.doc.Blocks) == 0 {
-				return nil, true
-			}
-			// n from the viewer steps straight into run mode.
-			return m.beginRun(false), true
-		}
-		if m.run.session == nil || m.run.session.Remaining() == 0 ||
-			(m.run.result != nil && m.run.result.Failed != nil) {
-			return nil, true
-		}
-		return m.stepCmd(), true
+		// Execute the highlighted block in place, under the code.
+		return m.beginInlineRun(), true
 
 	case "s":
+		// §4.7: the engine terminates the current process group.
 		for _, st := range m.inline {
 			if st != nil && st.active && st.cancel != nil {
 				st.cancel()
 			}
-		}
-		if m.mode == modeRun && m.run.active && m.run.cancel != nil {
-			// §4.7: the engine terminates the current process group and
-			// the run stops there.
-			m.run.cancel()
 		}
 		return nil, true
 
@@ -234,17 +165,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			m.exitBlockMode()
 			return nil, true
 		}
-		if m.mode == modeRun && !m.run.active {
-			m.mode = modeView
-			m.relayout()
-			return nil, true
-		}
 		return nil, true
 
 	case "tab":
-		if m.mode == modeRun {
-			return nil, true // sidebar is not interactive in run mode
-		}
 		if m.focus == focusContent && m.outline.visible {
 			m.focus = focusOutline
 		} else {
@@ -253,14 +176,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "shift+tab":
-		if m.mode == modeRun {
-			return nil, true
-		}
 		m.focus = focusContent
 		return nil, true
 
 	case "t":
-		if m.mode == modeRun || m.out == nil {
+		if m.out == nil {
 			return nil, true
 		}
 		if m.outline.tab == tabHeadings {
@@ -270,28 +190,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		m.outline.rebuild(m.doc, m.out, m.outline.width)
 		m.jumpToSelected()
-		return nil, true
-	}
-
-	if m.mode == modeRun {
-		// While a run is active, only scrolling works.
-		if m.run.active {
-			switch msg.String() {
-			case "j", "down", "k", "up", "g", "G", "pgup", "pgdown", "ctrl+u", "ctrl+d":
-				prev := m.content.YOffset
-				m.content, _ = m.content.Update(msg)
-				_ = prev
-				return nil, true
-			}
-			return nil, true // consume everything else during a run
-		}
-		switch msg.String() {
-		case "j", "down", "k", "up", "g", "G", "pgup", "pgdown", "ctrl+u", "ctrl+d":
-			prev := m.content.YOffset
-			m.content, _ = m.content.Update(msg)
-			_ = prev
-			return nil, true
-		}
 		return nil, true
 	}
 
@@ -396,39 +294,20 @@ func (m *Model) relayout() {
 	m.sidebarWidth = sidebarW
 	contentW := w
 	if m.outline.visible {
-		if m.mode == modeRun {
-			contentW = w - sidebarW - gutterWidth
-		} else {
-			// 2-col gutter, 1-col rail, 1-col right margin.
-			contentW = w - sidebarW - gutterWidth - railWidth - 1
-		}
+		// 2-col gutter, 1-col rail, 1-col right margin.
+		contentW = w - sidebarW - gutterWidth - railWidth - 1
 	}
 	contentW = max(10, contentW)
 
-	// Viewer: one blank row above the panes, then a hairline + footer.
-	// Run mode: the hairline + run status bar.
-	chrome := 2
-	if m.mode == modeView {
-		chrome = 3
-	}
-	bodyH := max(1, h-chrome)
+	// One blank row above the panes, then the hairline + footer.
+	bodyH := max(1, h-3)
 	m.paneHeight = bodyH
 
 	m.content.Width = contentW
-	if m.mode == modeRun {
-		m.content.Height = bodyH
-	} else {
-		// The text area carries 1 padding row at its top and bottom — the
-		// same insets as the sidebar — so the viewport shows the body
-		// height minus those two rows.
-		m.content.Height = max(1, bodyH-2)
-	}
-
-	if m.mode == modeRun {
-		m.laidOut = true
-		m.setRunContent()
-		return
-	}
+	// The text area carries 1 padding row at its top and bottom — the
+	// same insets as the sidebar — so the viewport shows the body
+	// height minus those two rows.
+	m.content.Height = max(1, bodyH-2)
 
 	out, err := render.Render(m.doc, contentW, m.colorEnabled())
 	if err != nil {
@@ -604,7 +483,7 @@ func (m *Model) updateSpy() {
 	m.outline.sel = idx
 }
 
-// View renders the full screen: header, body, hairline, status.
+// View renders the full screen: blank row, body, hairline, footer.
 func (m Model) View() string {
 	if !m.laidOut {
 		return "Loading…"
@@ -613,16 +492,6 @@ func (m Model) View() string {
 		return m.content.View()
 	}
 	var sb strings.Builder
-	if m.mode == modeRun {
-		// Run mode keeps the hairline and status bar: they carry the run
-		// state (running, stopped, failed, done).
-		sb.WriteString(m.bodyView())
-		sb.WriteByte('\n')
-		sb.WriteString(m.sepView())
-		sb.WriteByte('\n')
-		sb.WriteString(m.runStatus())
-		return sb.String()
-	}
 	// The viewer floats the panes with a blank row above, then a hairline
 	// and footer: context-aware shortcuts on the left, file path on the
 	// right.
@@ -658,22 +527,6 @@ func (m Model) keyHints() string {
 }
 
 func (m Model) bodyView() string {
-	if m.mode == modeRun {
-		content := m.content.View()
-		if !m.outline.visible {
-			return content
-		}
-		gutter := make([]string, m.content.Height)
-		for i := range gutter {
-			gutter[i] = strings.Repeat(" ", gutterWidth)
-		}
-		return lipgloss.JoinHorizontal(lipgloss.Top,
-			content,
-			strings.Join(gutter, "\n"),
-			m.globalsView(m.content.Height),
-		)
-	}
-
 	if m.renderErr != "" {
 		return errStyle.Render("render error: " + m.renderErr)
 	}

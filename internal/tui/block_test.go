@@ -179,9 +179,6 @@ func TestRunSelectedBlockInline(t *testing.T) {
 
 	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
 	got = mm.(Model)
-	if got.mode != modeView {
-		t.Fatal("inline execution should stay in the document view")
-	}
 	// While running, the gutter bar is orange.
 	if !strings.Contains(got.View(), railRunActiveStyle.Render("▌")) {
 		t.Fatal("running block's rail should be bright orange")

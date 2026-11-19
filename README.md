@@ -58,10 +58,11 @@ they never execute blocks:
 - `md-exec globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
   declared globals, defaults, overrides, and what starts present vs absent
 
-In the TUI you watch blocks execute step-by-step, inspect the globals table as it
-evolves, and review each block's source before and as it runs. Blocks always run
-headless internally — fresh process, empty stdin — exactly as the spec requires; the
-TUI is the layer the human sees, not an environment the blocks run in.
+In the TUI, highlight a heading in the outline and press **`\``** to select the
+code blocks in its section; **`r`** runs the highlighted block *in place*, with
+its output streaming into the document beneath it. Arrows walk between blocks,
+**`s`** stops a running block, and each executed block keeps its output and
+status indicator as you move through the document.
 
 Because the spec mandates no particular interface, nothing prevents other conforming
 runners from executing runbooks headless (CI, pipelines) — the reference tool simply
@@ -74,9 +75,10 @@ optimizes for human use.
 - [x] Headless utilities: `check`, `list`, `globals`, `print`
 - [x] TUI viewer: rendered content pane + outline/blocks sidebar (borderless, OpenCode-style)
 - [x] Execution core: `bash` and `python3` adapters, env harvest
-- [x] TUI execution UX: `r` runs the document with live block output and a
-      live globals inspector; `n` steps one block at a time; `s` stops
-      (the engine terminates the current process group, SPEC §4.7);
+- [x] Inline execution UX: `` ` `` selects executable blocks, `r` runs the
+      highlighted block in place with live output, arrows walk between blocks,
+      `s` stops (the engine terminates the current process group, SPEC §4.7);
+      the footer shows context-aware shortcuts and the file path;
       `md-exec DOC --set K=V` overrides
 - [x] `--theme auto|dark|notty` selects the palette for the TUI and `print`
       (auto: dark when the terminal supports color, notty otherwise)

@@ -20,7 +20,7 @@ const usage = `md-exec — executable Markdown (runbooks)
 
 Usage:
   md-exec DOC [--set K=V] [--theme auto|dark|notty]
-                                    open a runbook in the TUI (r runs, n steps, s stops)
+                                    open a runbook in the TUI (backtick selects blocks, r runs, s stops)
   md-exec check DOC                 validate; report all diagnostics at once
   md-exec list DOC                  enumerate executable blocks
   md-exec globals DOC [--set K=V]   show the document's global variables
