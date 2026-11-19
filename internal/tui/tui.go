@@ -513,23 +513,14 @@ func (m Model) bodyView() string {
 	margin := make([]string, m.content.Height)
 	focused := m.focus == focusOutline
 	for i := range gutter {
-		switch {
-		case !focused:
+		// Sidebar focus draws a single left border beside the strip: one
+		// primary line in the gutter's right column, nothing else.
+		if focused {
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
+		} else {
 			gutter[i] = strings.Repeat(" ", gutterWidth)
-			margin[i] = " "
-		case i == 0:
-			// The border hugs the sidebar: the line cells sit in the
-			// gutter's right column and the margin column, their primary
-			// half facing outward along the sidebar's edge.
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▀")
-			margin[i] = sideBorderStyle.Render("▀")
-		case i == m.content.Height-1:
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▄")
-			margin[i] = sideBorderStyle.Render("▄")
-		default:
-			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("▌")
-			margin[i] = sideBorderStyle.Render("▐")
 		}
+		margin[i] = " "
 		if focused {
 			side[i] = " "
 		} else {
@@ -572,7 +563,7 @@ func (m Model) railView() string {
 }
 
 func (m Model) outlineView() string {
-	return m.outline.view(m.content.Height, m.focus == focusOutline)
+	return m.outline.view(m.content.Height)
 }
 
 func (m Model) sepView() string {

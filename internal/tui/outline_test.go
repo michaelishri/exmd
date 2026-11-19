@@ -20,7 +20,7 @@ import (
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
-	v := m.outline.view(rows, false)
+	v := m.outline.view(rows)
 	lines := strings.Split(v, "\n")
 	if len(lines) != rows {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
@@ -133,12 +133,12 @@ func TestFocusBorderMoves(t *testing.T) {
 	got := mm.(Model)
 	v = got.View()
 	// Sidebar focus: the viewport frame disappears entirely; the sidebar's
-	// own half-block border remains.
+	// left border is the only remaining line (one per body row).
 	if n := strings.Count(v, "┌"); n != 0 {
 		t.Fatalf("frame boxes after tab = %d, want 0 (frame gone)", n)
 	}
-	if n := strings.Count(v, "▀"); n < 50 {
-		t.Fatalf("sidebar border top line too short: %d cells", n)
+	if n := strings.Count(v, "│"); n != got.content.Height {
+		t.Fatalf("sidebar border rows after tab = %d, want %d", n, got.content.Height)
 	}
 
 	// Tab back: the viewport frame returns.
@@ -153,35 +153,51 @@ func TestFocusBorderMoves(t *testing.T) {
 	}
 }
 
-// TestSidebarFocusKeepsLayout checks the focused sidebar: the border lines
-// are drawn on the existing pad tiles, so the layout is identical with and
-// without focus — the title stays put — and a blank row remains above the
-// bottom border line.
+// TestSidebarFocusKeepsLayout checks the focused sidebar: the strip's own
+// rendering is identical with and without focus (nothing shifts), and the
+// only focus artifact is a primary left border line in the gutter beside
+// the strip — one per body row, gone again when focus returns.
 func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	unfocused := strings.Split(m.outline.view(m.content.Height, false), "\n")
-	focused := strings.Split(m.outline.view(m.content.Height, true), "\n")
+	unfocused := strings.Split(m.outline.view(m.content.Height), "\n")
+	focused := strings.Split(m.outline.view(m.content.Height), "\n")
 
-	// Nothing shifts: every content row strips to the same text in both
-	// states — only the top and bottom border tiles are decorated.
-	for i := 1; i < len(unfocused)-1; i++ {
+	// The strip's own rendering does not depend on focus at all.
+	for i := range unfocused {
 		if ansi.Strip(unfocused[i]) != ansi.Strip(focused[i]) {
-			t.Fatalf("row %d shifted on focus:\n unfocused: %q\n focused:  %q",
+			t.Fatalf("row %d shifted on focus:\n before: %q\n after:  %q",
 				i, ansi.Strip(unfocused[i]), ansi.Strip(focused[i]))
 		}
 	}
 
-	// The tiles are decorated while focused.
-	if !strings.Contains(ansi.Strip(focused[0]), "▀▀") {
-		t.Fatalf("missing top border line: %q", focused[0])
+	// The border lives in the gutter beside the strip while focused.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	got := mm.(Model)
+	v := got.View()
+	lines := strings.Split(v, "\n")
+	borderCol := 1 + railWidth + m.content.Width + gutterWidth - 1
+	for i := 1; i <= got.content.Height; i++ {
+		stripped := ansi.Strip(lines[i])
+		if cellAt(stripped, borderCol) != "│" {
+			t.Fatalf("body row %d missing the focus border at column %d: %q", i, borderCol, stripped)
+		}
 	}
-	last := len(focused) - 1
-	if !strings.Contains(ansi.Strip(focused[last]), "▄▄") {
-		t.Fatalf("missing bottom border line: %q", focused[last])
+	// And the frame stays gone.
+	if strings.Contains(ansi.Strip(lines[0]), "┌") {
+		t.Fatal("the viewport frame should be gone with the sidebar focused")
 	}
-	if strings.TrimSpace(focused[last-1]) != "" {
-		t.Fatalf("no blank row above the bottom border: %q", focused[last-1])
+}
+
+// cellAt returns the rune at the given display column of a stripped line.
+func cellAt(s string, col int) string {
+	w := 0
+	for _, r := range s {
+		if w == col {
+			return string(r)
+		}
+		w++
 	}
+	return ""
 }
 
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
@@ -193,13 +209,13 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	before := strings.Split(m.outline.view(m.content.Height, false), "\n")
+	before := strings.Split(m.outline.view(m.content.Height), "\n")
 
 	// Focus the sidebar and select the first entry.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	got := mm.(Model)
-	after := strings.Split(got.outline.view(got.content.Height, false), "\n")
+	after := strings.Split(got.outline.view(got.content.Height), "\n")
 
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
@@ -247,7 +263,7 @@ More text after the h1.
 	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "An h2 comes first" {
 		t.Fatalf("entries = %+v, want only the h2", m.outline.entries)
 	}
-	v := m.outline.view(m.content.Height, false)
+	v := m.outline.view(m.content.Height)
 	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
 	}
@@ -271,7 +287,7 @@ func TestHeadingRowShading(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	v := m.outline.view(m.content.Height, false)
+	v := m.outline.view(m.content.Height)
 	lines := strings.Split(v, "\n")
 
 	// Entries start at row 3: entry 0 is an h2 (1. Preflight…), entry 5 is
