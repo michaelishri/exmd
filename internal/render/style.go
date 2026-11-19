@@ -61,20 +61,19 @@ func (o *Output) appendPlain(chunk string) {
 }
 
 // appendBadge adds the lightweight executable-block marker that ties the
-// rendered view to the runbook semantics (SPEC.md §4.8 observation). While
-// color is available the badge shares the executable block's surface: the
-// panel background spans the content width, so badge and code read as one
-// block.
+// rendered view to the runbook semantics (SPEC.md §4.8 observation). It
+// sits on the page background like ordinary prose; only the code block
+// itself carries the executable surface color.
 func (o *Output) appendBadge(b *doc.Block, color bool) {
 	label := fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b))
+	var line string
 	if !color {
-		o.Lines = append(o.Lines, ansi.Truncate("  ▸ "+label, max(1, o.Width), "…"))
-		return
+		line = "  ▸ " + label
+	} else {
+		accent := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+		muted := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		line = "  " + accent.Render("▸") + " " + muted.Render(label)
 	}
-	accent := lipgloss.NewStyle().Foreground(lipgloss.Color("#8f8af4"))
-	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a95"))
-	bg := lipgloss.NewStyle().Background(lipgloss.Color(execPanel)).Width(o.Width)
-	line := bg.Render("  " + accent.Render("▸") + " " + muted.Render(label))
 	o.Lines = append(o.Lines, ansi.Truncate(line, max(1, o.Width), "…"))
 }
 

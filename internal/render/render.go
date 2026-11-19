@@ -81,9 +81,10 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			continue
 		}
 		// One blank line between chunks, unless the previous chunk already
-		// ends with a visually blank line (glamour pads heading blocks).
+		// ends with a visually blank line (glamour pads heading blocks and
+		// the executable surface now ends with a shaded blank row).
 		if len(out.Lines) > 0 {
-			if last := out.Lines[len(out.Lines)-1]; xansi.StringWidth(last) > 0 {
+			if last := xansi.Strip(out.Lines[len(out.Lines)-1]); strings.TrimSpace(last) != "" {
 				out.Lines = append(out.Lines, "")
 			}
 		}
@@ -107,6 +108,10 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 			out.appendGlamour(chunk, width, execStyle)
 			if color {
 				paintExecLines(out.Lines[start:], width)
+				// Glamour's code block has a blank row above its first code
+				// line; add a matching shaded blank row below the last one.
+				out.Lines = append(out.Lines,
+					"\x1b[48;2;24;24;30m"+strings.Repeat(" ", width)+"\x1b[0m")
 			}
 		default:
 			out.appendGlamour(chunk, width, style)

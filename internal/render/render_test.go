@@ -106,14 +106,21 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	}
 	bm := out.Blocks[0]
 	badge, code := out.Lines[bm.Line], out.Lines[bm.Line+1]
-	if !strings.Contains(badge, "48;2;24;24;30") {
-		t.Fatalf("badge row has no exec background: %q", badge)
+	if strings.Contains(badge, "48;2;24;24;30") {
+		t.Fatalf("badge row should sit on the page background: %q", badge)
 	}
 	if !strings.Contains(code, "48;2;24;24;30") {
 		t.Fatalf("code row has no exec background: %q", code)
 	}
 	if !strings.Contains(code, "\x1b[0m\x1b[48;2;24;24;30m") {
 		t.Fatal("background is not re-emitted after chroma's token reset")
+	}
+	// The block ends with a shaded blank row, mirroring the blank row
+	// above its first code line.
+	last := out.Lines[bm.End]
+	if !strings.Contains(last, "48;2;24;24;30") ||
+		strings.TrimSpace(ansi.Strip(last)) != "" {
+		t.Fatalf("no shaded blank row after the code: %q", last)
 	}
 }
 
