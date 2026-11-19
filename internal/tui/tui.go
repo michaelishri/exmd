@@ -739,6 +739,18 @@ func (m Model) railView() string {
 		case st.err != nil || st.status != 0:
 			style = railFailStyle
 		}
+		if index == m.blockSel {
+			// Brighten the status hue on the block holding the cursor so
+			// it stays visible among other executed blocks.
+			switch {
+			case st.active:
+				style = railRunActiveStyle
+			case st.err != nil || st.status != 0:
+				style = railFailActiveStyle
+			default:
+				style = railDoneActiveStyle
+			}
+		}
 		start, end := blockRows(index)
 		mark(start, end, style)
 	}

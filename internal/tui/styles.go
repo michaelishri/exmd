@@ -48,6 +48,11 @@ var (
 	railDoneStyle  lipgloss.Style
 	railFailStyle  lipgloss.Style
 
+	// Brighter, bold variants mark which executed block holds the cursor.
+	railRunActiveStyle  lipgloss.Style
+	railDoneActiveStyle lipgloss.Style
+	railFailActiveStyle lipgloss.Style
+
 	// sideBorderStyle draws the sidebar's left border line — always
 	// primary; focus is expressed by the strip's background lift.
 	sideBorderStyle lipgloss.Style
@@ -134,6 +139,14 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.Success))
 	railFailStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Error))
+
+	// Same hues, one shade brighter and bold, for the selected block.
+	railRunActiveStyle = railRunStyle.
+		Foreground(lipgloss.Color("#ffc9a3")).Bold(true)
+	railDoneActiveStyle = railDoneStyle.
+		Foreground(lipgloss.Color("#a5e8a8")).Bold(true)
+	railFailActiveStyle = railFailStyle.
+		Foreground(lipgloss.Color("#ff9b9b")).Bold(true)
 
 	// sideBorderStyle draws the sidebar's focus border: a single primary
 	// line along the strip's left edge.

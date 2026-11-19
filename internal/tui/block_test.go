@@ -183,8 +183,8 @@ func TestRunSelectedBlockInline(t *testing.T) {
 		t.Fatal("inline execution should stay in the document view")
 	}
 	// While running, the gutter bar is orange.
-	if !strings.Contains(got.View(), railRunStyle.Render("▌")) {
-		t.Fatal("running block's rail should be orange")
+	if !strings.Contains(got.View(), railRunActiveStyle.Render("▌")) {
+		t.Fatal("running block's rail should be bright orange")
 	}
 	got = pump(t, got, cmd)
 
@@ -234,8 +234,8 @@ func TestRunSelectedBlockInline(t *testing.T) {
 		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
 	}
 	// On success, the rail turns green.
-	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
-		t.Fatal("successful block's rail should be green")
+	if !strings.Contains(got.View(), railDoneActiveStyle.Render("▌")) {
+		t.Fatal("successful block's rail should be bright green")
 	}
 
 	// Moving the selection elsewhere leaves both the output and the
@@ -288,12 +288,16 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 	// display positions (after the earlier box is accounted for).
 	viewLines := strings.Split(got.View(), "\n")
 	for _, index := range []int{0, 1} {
+		wantStyle := railDoneStyle
+		if index == got.blockSel {
+			wantStyle = railDoneActiveStyle
+		}
 		bm := got.out.Blocks[index]
 		start := got.displayLine(bm.Line+1) - got.content.YOffset + 1
 		end := got.displayLine(bm.End) - got.content.YOffset + 1
 		found := false
 		for r := start; r < end && r < got.paneHeight && r+1 < len(viewLines); r++ {
-			if strings.Contains(viewLines[1+r], railDoneStyle.Render("▌")) {
+			if strings.Contains(viewLines[1+r], wantStyle.Render("▌")) {
 				found = true
 			}
 		}
@@ -359,7 +363,7 @@ func TestInlineFailureRailTurnsRed(t *testing.T) {
 	if got.inline[1].status == 0 {
 		t.Fatalf("expected a failing block, status = %d", got.inline[1].status)
 	}
-	if !strings.Contains(got.View(), railFailStyle.Render("▌")) {
-		t.Fatal("failed block's rail should be red")
+	if !strings.Contains(got.View(), railFailActiveStyle.Render("▌")) {
+		t.Fatal("failed block's rail should be bright red")
 	}
 }
