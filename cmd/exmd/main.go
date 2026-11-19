@@ -22,7 +22,7 @@ const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
   exmd DOC [--set K=V] [--theme auto|dark|notty]
-                                    open a runbook in the TUI (backtick selects blocks, r runs, s stops)
+                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops)
   exmd check DOC                 validate; report all diagnostics at once
   exmd list DOC                  enumerate executable blocks
   exmd globals DOC [--set K=V]   show the document's global variables

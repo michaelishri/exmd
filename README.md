@@ -62,8 +62,9 @@ they never execute blocks:
 In the TUI, highlight a heading in the outline and press **`\``** to select the
 code blocks in its section; **`r`** runs the highlighted block *in place*, with
 its output streaming into the document beneath it. Arrows walk between blocks,
-**`s`** stops a running block, and each executed block keeps its output and
-status indicator as you move through the document.
+**`c`** copies the focused block's output to the clipboard as plain text (via
+OSC 52), **`s`** stops a running block, and each executed block keeps its output
+and status indicator as you move through the document.
 
 Because the spec mandates no particular interface, nothing prevents other conforming
 runners from executing runbooks headless (CI, pipelines) — the reference tool simply

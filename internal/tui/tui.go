@@ -7,6 +7,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -75,6 +76,10 @@ type Model struct {
 	// content block including its padding rows); the viewport itself shows
 	// paneHeight minus the content's two padding rows.
 	paneHeight int
+
+	// flash is a short-lived reaction shown in the footer, e.g. after a
+	// copy. The next key press clears it.
+	flash string
 }
 
 // New builds the model for a loaded document; overrides are launch-time
@@ -144,6 +149,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKey dispatches a key to the global, outline or block handler. It
 // reports whether the key was consumed.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	// A footer reaction lasts until the next key press. The handler that
+	// consumes this key may set a fresh one (notably `c` below).
+	m.flash = ""
 	if cmd, handled := m.handleGlobalKey(msg); handled {
 		return cmd, true
 	}
@@ -166,6 +174,9 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		// Execute the highlighted block in place, under the code.
 		return m.beginInlineRun(), true
+
+	case "c":
+		return m.copyBlockOutput(), true
 
 	case "s":
 		// §4.7: the engine terminates the current process group.
@@ -209,6 +220,35 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	return nil, false
+}
+
+// copyBlockOutput copies the focused block's output to the terminal clipboard
+// as plain text. Only its own output is copied — never the code, the output
+// box's separator, or another block's output.
+func (m *Model) copyBlockOutput() tea.Cmd {
+	if m.blockSel < 0 || !m.validBlock(m.blockSel) {
+		m.flash = "select a block with ` first"
+		return nil
+	}
+	text := ""
+	if st := m.inline[m.blockSel]; st != nil {
+		text = st.copiedText()
+	}
+	if text == "" {
+		m.flash = "no output to copy — run it with r first"
+		return nil
+	}
+	if err := copyToClipboard(text); err != nil {
+		m.flash = "copy failed: " + err.Error()
+		return nil
+	}
+	lines := strings.Count(text, "\n") + 1
+	noun := "lines"
+	if lines == 1 {
+		noun = "line"
+	}
+	m.flash = fmt.Sprintf("copied %d %s from block %d", lines, noun, m.blockSel+1)
+	return nil
 }
 
 // handleOutlineKey moves the sidebar selection. The outline consumes every
@@ -529,7 +569,11 @@ func (m Model) View() string {
 // footerView is the bottom line: shortcuts for the current context on the
 // left, the runbook's file path on the right.
 func (m Model) footerView() string {
-	return composeLeftRight(m.keyHints(), infoStyle.Render(m.doc.Path), m.width)
+	left := m.keyHints()
+	if m.flash != "" {
+		left = infoStyle.Render(m.flash)
+	}
+	return composeLeftRight(left, infoStyle.Render(m.doc.Path), m.width)
 }
 
 // keyHints reports only the keys relevant to the current context.
@@ -539,7 +583,7 @@ func (m Model) keyHints() string {
 	case m.inlineActive():
 		hints = []string{"s stop", "q quit"}
 	case m.blockSel >= 0:
-		hints = []string{"j/k blocks", "r run", "s stop", "esc back", "q quit"}
+		hints = []string{"j/k blocks", "r run", "c copy", "s stop", "esc back", "q quit"}
 	case m.focus == focusOutline:
 		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "q quit"}
 	default:

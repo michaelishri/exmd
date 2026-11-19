@@ -214,6 +214,21 @@ func (st *inlineState) write(chunk []byte) {
 	}
 }
 
+// copiedText returns the block's output as plain text: every complete line,
+// plus the trailing partial line still accumulating during a run. Copying
+// uses these stored lines, not the rendered box, so the text is neither
+// truncated to the pane width nor decorated with the output box's chrome.
+func (st *inlineState) copiedText() string {
+	text := strings.Join(st.lines, "\n")
+	if st.pending != "" {
+		if text != "" {
+			text += "\n"
+		}
+		text += st.pending
+	}
+	return text
+}
+
 // finalizeInline records one block's outcome and flushes trailing output.
 // The listener has already drained the event channel at this point.
 func (m *Model) finalizeInline(index int, result *exec.RunResult) {
