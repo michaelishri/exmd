@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
-	"github.com/michaelishri/md-exec/internal/tui"
+	"github.com/michaelishri/exmd/internal/tui"
 )
 
 // cmdTUI opens a document in the viewer. Execution lives here; headless
@@ -22,7 +22,7 @@ func cmdTUI(args []string) int {
 		return 0
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
 	sets, positional, err := parseSetArgs(args)
@@ -31,17 +31,17 @@ func cmdTUI(args []string) int {
 		return 0
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
+		fmt.Fprintln(os.Stderr, "usage: exmd DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
 		return 2
 	}
 
 	th, err := resolveTheme(themeName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
 	tui.SetTheme(th)
@@ -53,17 +53,17 @@ func cmdTUI(args []string) int {
 	res.Sort()
 	printDiagnostics(res)
 	if res.HasErrors() {
-		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `md-exec check` reports them all at once"))
+		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
 		return 2
 	}
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Fprintf(os.Stderr, "md-exec: the TUI needs an interactive terminal; try `md-exec check %s`\n", positional[0])
+		fmt.Fprintf(os.Stderr, "exmd: the TUI needs an interactive terminal; try `exmd check %s`\n", positional[0])
 		return 2
 	}
 
 	p := tea.NewProgram(tui.New(res, sets.toMap()), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
 	return 0

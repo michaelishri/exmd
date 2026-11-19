@@ -1,4 +1,4 @@
-# md-exec bash harness (SPEC.md §5.1).
+# exmd bash harness (SPEC.md §5.1).
 #
 # Sources the block inside a controlled shell and dumps the shell's exported
 # environment — the environment the block would hand to its children (§4.3) —

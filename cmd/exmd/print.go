@@ -8,11 +8,11 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/michaelishri/md-exec/internal/render"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
-const printUsage = "usage: md-exec print DOC [--width N] [--theme auto|dark|notty]"
+const printUsage = "usage: exmd print DOC [--width N] [--theme auto|dark|notty]"
 
 // parsePrintArgs parses print's flags, accepting both dash forms for --width
 // and --theme via the shared flag parser.
@@ -52,7 +52,7 @@ func cmdPrint(args []string) int {
 		return 0
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec print: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd print: %v\n", err)
 		return 2
 	}
 	if len(positional) != 1 {
@@ -62,7 +62,7 @@ func cmdPrint(args []string) int {
 
 	th, err := resolveTheme(themeName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec print: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd print: %v\n", err)
 		return 2
 	}
 

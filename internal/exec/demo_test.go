@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // TestDemoPythonBlockStandalone checks that the "5.2 From Python" script

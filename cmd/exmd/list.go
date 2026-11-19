@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // cmdList enumerates the document's executable blocks (SPEC.md §3).
 func cmdList(args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec list DOC")
+		fmt.Fprintln(os.Stderr, "usage: exmd list DOC")
 		return 2
 	}
 	res, code := loadDoc(args[0])

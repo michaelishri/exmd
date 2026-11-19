@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 func newViewer(t *testing.T, w, h int) Model {
@@ -55,7 +55,7 @@ func TestViewerLayout(t *testing.T) {
 		t.Fatal("the viewport frame should be gone")
 	}
 	// The document itself is still there (the h1 renders in the content).
-	if !strings.Contains(v, "md-exec feature tour") {
+	if !strings.Contains(v, "exmd feature tour") {
 		t.Fatal("document content missing")
 	}
 	// Footer: a hairline, context-aware hints on the left, file path right.

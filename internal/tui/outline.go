@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/michaelishri/md-exec/internal/doc"
-	"github.com/michaelishri/md-exec/internal/render"
+	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/render"
 )
 
 const (

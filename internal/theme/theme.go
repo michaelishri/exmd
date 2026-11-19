@@ -1,4 +1,4 @@
-// Package theme holds the design tokens for the md-exec TUI. The visual
+// Package theme holds the design tokens for the exmd TUI. The visual
 // language follows the OpenCode TUI: no borders, separation by background
 // shades, muted chrome, and color reserved for state.
 package theme

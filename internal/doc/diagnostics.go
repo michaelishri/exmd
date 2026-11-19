@@ -1,10 +1,10 @@
-// Package doc implements the document load path of the md-exec specification
+// Package doc implements the document load path of the exmd specification
 // (SPEC.md §2): frontmatter parsing and validation, executable-fence
 // extraction (§3), the document outline, and collect-all load-time
 // diagnostics (§2.3).
 //
 // Loading never aborts on the first problem: every diagnosable issue is
-// collected so `md-exec check` can report them all at once. Execution is
+// collected so `exmd check` can report them all at once. Execution is
 // refused entirely when any error-severity diagnostic is present (§6.1).
 package doc
 

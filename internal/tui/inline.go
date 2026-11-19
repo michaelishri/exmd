@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/michaelishri/md-exec/internal/exec"
-	"github.com/michaelishri/md-exec/internal/render"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/exec"
+	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // eventChanBuffer is sized so that a synchronous test driver cannot

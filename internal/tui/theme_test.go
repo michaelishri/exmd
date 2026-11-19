@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // TestSetThemeRebuildsStyles checks that SetTheme re-points the derived

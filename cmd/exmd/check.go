@@ -10,7 +10,7 @@ import (
 // are reported together; any error exits 2 with zero side effects.
 func cmdCheck(args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec check DOC")
+		fmt.Fprintln(os.Stderr, "usage: exmd check DOC")
 		return 2
 	}
 	res, code := loadDoc(args[0])

@@ -1,4 +1,4 @@
-// Command md-exec is the reference runner of the md-exec specification
+// Command exmd is the reference runner of the exmd specification
 // (SPEC.md). Execution lives in the TUI; headless verbs read and validate
 // documents without ever running blocks.
 package main
@@ -11,24 +11,24 @@ import (
 	"text/tabwriter"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/michaelishri/md-exec/internal/doc"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 	"github.com/muesli/termenv"
 )
 
-const version = "0.1.0-dev"
+const version = "0.1.0"
 
-const usage = `md-exec — executable Markdown (runbooks)
+const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
-  md-exec DOC [--set K=V] [--theme auto|dark|notty]
+  exmd DOC [--set K=V] [--theme auto|dark|notty]
                                     open a runbook in the TUI (backtick selects blocks, r runs, s stops)
-  md-exec check DOC                 validate; report all diagnostics at once
-  md-exec list DOC                  enumerate executable blocks
-  md-exec globals DOC [--set K=V]   show the document's global variables
-  md-exec print DOC [--width N] [--theme auto|dark|notty]
+  exmd check DOC                 validate; report all diagnostics at once
+  exmd list DOC                  enumerate executable blocks
+  exmd globals DOC [--set K=V]   show the document's global variables
+  exmd print DOC [--width N] [--theme auto|dark|notty]
                                     render the document to the terminal
-  md-exec version                   print the version
+  exmd version                   print the version
 
 Launch-time overrides (--set KEY=VALUE) may target any global declared in the
 frontmatter; the frontmatter is the complete contract of the document's
@@ -131,7 +131,7 @@ func run(args []string) int {
 		fmt.Println(usage)
 		return 0
 	case "--version", "-v", "version":
-		fmt.Printf("md-exec version %s (spec v1)\n", version)
+		fmt.Printf("exmd version %s (spec v1)\n", version)
 		return 0
 	default:
 		if strings.HasPrefix(args[0], "-") {
@@ -148,7 +148,7 @@ func run(args []string) int {
 func loadDoc(path string) (*doc.Result, int) {
 	res, err := doc.Load(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return nil, 2
 	}
 	return res, 0

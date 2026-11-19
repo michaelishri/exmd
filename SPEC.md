@@ -1,19 +1,19 @@
-# md-exec Specification
+# exmd Specification
 
 **Version:** 1 (draft 1)
 **Status:** Initial specification, pre-implementation
-**Reference implementation:** `md-exec` (Go)
+**Reference implementation:** `exmd` (Go)
 
 ---
 
 ## 1. Overview
 
-md-exec defines a format for **executable Markdown documents** ("runbooks"): ordinary
+exmd defines a format for **executable Markdown documents** ("runbooks"): ordinary
 Markdown files whose fenced code blocks can be executed in order by a runner, sharing
 state through environment variables.
 
 A **runner** is a program that reads such a document and executes its executable blocks
-according to this specification. The reference runner is `md-exec`, a Go implementation
+according to this specification. The reference runner is `exmd`, a Go implementation
 whose execution surface is a TUI (see README.md).
 
 ### 1.1 Goals
@@ -377,7 +377,7 @@ interpreter exists on `PATH`.
 
 This specification mandates no user interface. A runner MAY expose execution through
 a TUI, a command line, a library API, or any other surface; conformance (§9) concerns
-the semantics of §2–§5, not the interface. The reference runner (`md-exec`) executes
+the semantics of §2–§5, not the interface. The reference runner (`exmd`) executes
 through a TUI and offers headless utility verbs that never execute blocks (see
 README.md).
 

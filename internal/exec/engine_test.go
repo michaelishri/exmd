@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // runDoc loads a testdata document and runs it with buffers for output and

@@ -32,8 +32,8 @@ func (s setList) toMap() map[string]string {
 
 // parseSetArgs accepts --set in any position relative to the document:
 //
-//	md-exec globals DOC --set KEY=VALUE
-//	md-exec globals --set KEY=VALUE DOC --set KEY2=VALUE2
+//	exmd globals DOC --set KEY=VALUE
+//	exmd globals --set KEY=VALUE DOC --set KEY2=VALUE2
 func parseSetArgs(args []string) (setList, []string, error) {
 	args, help := extractHelp(args)
 	if help {
@@ -58,15 +58,15 @@ func parseSetArgs(args []string) (setList, []string, error) {
 func cmdGlobals(args []string) int {
 	sets, positional, err := parseSetArgs(args)
 	if errors.Is(err, errHelp) {
-		fmt.Println("usage: md-exec globals DOC [--set KEY=VALUE]...")
+		fmt.Println("usage: exmd globals DOC [--set KEY=VALUE]...")
 		return 0
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "md-exec globals: %v\n", err)
+		fmt.Fprintf(os.Stderr, "exmd globals: %v\n", err)
 		return 2
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: md-exec globals DOC [--set KEY=VALUE]...")
+		fmt.Fprintln(os.Stderr, "usage: exmd globals DOC [--set KEY=VALUE]...")
 		return 2
 	}
 

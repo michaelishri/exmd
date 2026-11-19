@@ -31,7 +31,7 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 	if lines[0] == "" || strings.TrimSpace(lines[0]) != "" {
 		t.Fatalf("top pad row missing: %q", lines[0])
 	}
-	if !strings.Contains(lines[1], "md-exec feature tour") {
+	if !strings.Contains(lines[1], "exmd feature tour") {
 		t.Fatalf("title row missing the first h1: %q", lines[1])
 	}
 	if !strings.HasPrefix(lines[1], "  ") {
@@ -408,7 +408,7 @@ func TestHeadingRowShading(t *testing.T) {
 		t.Fatal("h2 and h3 rows should render with different shading")
 	}
 	title := lines[1]
-	if !strings.Contains(ansi.Strip(title), "md-exec feature tour") {
+	if !strings.Contains(ansi.Strip(title), "exmd feature tour") {
 		t.Fatal("test setup: row 1 is not the title row")
 	}
 	if title == h2 {

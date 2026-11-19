@@ -1,4 +1,4 @@
-// Package tui implements the md-exec viewer: the rendered runbook on the
+// Package tui implements the exmd viewer: the rendered runbook on the
 // left, the document outline as a shaded 50-column sidebar on the right,
 // and a footer with context-aware shortcuts and the file path. The visual
 // language follows the OpenCode TUI — borderless, separated by background
@@ -15,10 +15,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"github.com/michaelishri/md-exec/internal/doc"
-	"github.com/michaelishri/md-exec/internal/exec"
-	"github.com/michaelishri/md-exec/internal/render"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/exec"
+	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 const (
@@ -95,7 +95,7 @@ func New(res *doc.Result, overrides map[string]string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.SetWindowTitle("md-exec — " + m.doc.HeadingText())
+	return tea.SetWindowTitle("exmd — " + m.doc.HeadingText())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -3,8 +3,8 @@ package tui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/michaelishri/md-exec/internal/render"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // t is the active theme; the styles below are derived from it and rebuilt by

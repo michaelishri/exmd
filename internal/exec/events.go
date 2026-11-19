@@ -1,4 +1,4 @@
-// Package exec implements the execution engine of the md-exec specification
+// Package exec implements the execution engine of the exmd specification
 // (SPEC.md §4–5): blocks run in fresh processes with the composed
 // environment, state flows forward through the environment-delta harvest,
 // and the world is closed over the frontmatter's declared globals.
@@ -11,7 +11,7 @@ package exec
 import (
 	"fmt"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // Stream identifies a block's output streams.

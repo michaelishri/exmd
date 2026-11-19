@@ -1,7 +1,7 @@
 // Package render turns a parsed document into styled terminal lines.
 //
 // It is a pure function of (document, width, color): the TUI re-renders on
-// resize and the `md-exec print` verb shares the same pipeline. Content is
+// resize and the `exmd print` verb shares the same pipeline. Content is
 // rendered with glamour, chunk by chunk, so the output carries the rendered
 // line index of every heading (for outline navigation and scroll-spy) and
 // every executable block (for badge placement and jumps).
@@ -16,7 +16,7 @@ import (
 	"github.com/charmbracelet/glamour/styles"
 	xansi "github.com/charmbracelet/x/ansi"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // HeadingMark is the rendered line at which a heading starts. Index i

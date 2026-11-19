@@ -1,4 +1,4 @@
-"""md-exec python harness (SPEC.md §5.1).
+"""exmd python harness (SPEC.md §5.1).
 
 Runs the block as __main__ via runpy and dumps the final os.environ —
 the environment the block would hand to its children (§4.3) — from an

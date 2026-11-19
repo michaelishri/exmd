@@ -1,12 +1,12 @@
 ---
 type: runbook
-title: md-exec feature tour
+title: exmd feature tour
 spec: 1
 tags: demo,reference    # unknown frontmatter key → runner warns (spec §2.1)
 globals: {AUTHOR: "Michael Ishri", NOTE: "hello from frontmatter", JOB_NAME, DEPLOY_ID, WORK, LOG_LINES}
 ---
 
-# md-exec feature tour
+# exmd feature tour
 
 This runbook exercises every v1 feature of the [spec](../../SPEC.md) safely:
 it only writes inside a scratch workspace it creates for itself.

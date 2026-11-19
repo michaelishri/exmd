@@ -32,7 +32,7 @@ This repo deliberately separates the two. Don't confuse them:
 
 | | **The specification** | **The tool** |
 |---|---|---|
-| Lives in | `SPEC.md` | `md-exec` — this repo's Go implementation |
+| Lives in | `SPEC.md` | `exmd` — this repo's Go implementation |
 | Defines | The document format and execution semantics: frontmatter schema, `globals`, `lang:exec` fences, `@script` references, the env-harvest state rule, failure behavior | Everything about *using* the runner: the TUI, rendering, colors, progress views, keybindings |
 | Normative? | Yes — a versioned contract (v1); any runner, in any language, can conform | No — one conforming implementation of the spec |
 | Changes when | The format or semantics evolve (bump the `spec:` version) | Whenever the UX improves — no spec impact |
@@ -46,17 +46,17 @@ Rules of thumb:
 
 ## The tool
 
-`md-exec` is the reference implementation of the spec, written in Go. **Execution is a
+`exmd` is the reference implementation of the spec, written in Go. **Execution is a
 TUI experience.** Headless commands are utilities that read and validate documents —
 they never execute blocks:
 
-- `md-exec check DOC` — validate the document: frontmatter, fence grammar, adapters
+- `exmd check DOC` — validate the document: frontmatter, fence grammar, adapters
   and interpreters, script-reference files; reports all diagnostics at once
-- `md-exec print DOC [--width N] [--theme auto|dark|notty]` — render the
+- `exmd print DOC [--width N] [--theme auto|dark|notty]` — render the
   document to the terminal
-- `md-exec list DOC` — enumerate executable blocks: index, language, kind (embedded /
+- `exmd list DOC` — enumerate executable blocks: index, language, kind (embedded /
   `@script`), line number, referenced path
-- `md-exec globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
+- `exmd globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
   declared globals, defaults, overrides, and what starts present vs absent
 
 In the TUI, highlight a heading in the outline and press **`\``** to select the

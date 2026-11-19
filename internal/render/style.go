@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	xansi "github.com/charmbracelet/x/ansi"
 
-	"github.com/michaelishri/md-exec/internal/doc"
-	"github.com/michaelishri/md-exec/internal/theme"
+	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // DefaultWidth is the render width when none is supplied.

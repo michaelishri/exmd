@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 const (

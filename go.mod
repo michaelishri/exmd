@@ -1,4 +1,4 @@
-module github.com/michaelishri/md-exec
+module github.com/michaelishri/exmd
 
 go 1.27.2
 
