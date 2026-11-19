@@ -62,6 +62,11 @@ type Model struct {
 	run       runState
 	overrides map[string]string
 	theme     theme.Theme
+
+	// paneHeight is the height of the body panes (rail, gutter, sidebar,
+	// content block including its padding rows); the viewport itself shows
+	// paneHeight minus the content's two padding rows.
+	paneHeight int
 }
 
 // New builds the model for a loaded document; overrides are launch-time
@@ -329,9 +334,17 @@ func (m *Model) relayout() {
 	// hairline + status bar.
 	chrome := 2
 	bodyH := max(1, h-chrome)
+	m.paneHeight = bodyH
 
 	m.content.Width = contentW
-	m.content.Height = bodyH
+	if m.mode == modeRun {
+		m.content.Height = bodyH
+	} else {
+		// The text area carries 1 padding row at its top and bottom — the
+		// same insets as the sidebar — so the viewport shows the body
+		// height minus those two rows.
+		m.content.Height = max(1, bodyH-2)
+	}
 
 	if m.mode == modeRun {
 		m.laidOut = true
@@ -508,9 +521,9 @@ func (m Model) bodyView() string {
 	if !m.outline.visible {
 		return content
 	}
-	side := make([]string, m.content.Height)
-	gutter := make([]string, m.content.Height)
-	margin := make([]string, m.content.Height)
+	side := make([]string, m.paneHeight)
+	gutter := make([]string, m.paneHeight)
+	margin := make([]string, m.paneHeight)
 	focused := m.focus == focusOutline
 	for i := range gutter {
 		// The sidebar's left border line is always primary; focus is
@@ -526,12 +539,24 @@ func (m Model) bodyView() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		strings.Join(side, "\n"),
 		m.railView(),
-		content,
+		m.paddedContent(),
 		strings.Join(gutter, "\n"),
 		m.outlineView(),
 		strings.Join(margin, "\n"),
 		strings.Join(side, "\n"),
 	)
+}
+
+// paddedContent wraps the viewport with the pane's top and bottom padding
+// rows — the same one-row insets the sidebar carries internally — so the
+// document's first and last visible lines never touch the pane's edges.
+func (m Model) paddedContent() string {
+	rows := make([]string, m.paneHeight)
+	for i := range rows {
+		rows[i] = " "
+	}
+	copy(rows[1:], strings.Split(m.content.View(), "\n"))
+	return strings.Join(rows, "\n")
 }
 
 // railView builds the one-column rail at the left edge of the text area:
@@ -540,7 +565,7 @@ func (m Model) bodyView() string {
 // selection whether it came from the cursor or the scroll-spy, and renders
 // nothing when no entry is selected.
 func (m Model) railView() string {
-	rows := make([]string, m.content.Height)
+	rows := make([]string, m.paneHeight)
 	for i := range rows {
 		rows[i] = " "
 	}
@@ -549,17 +574,18 @@ func (m Model) railView() string {
 	}
 
 	// The selected heading's rendered line index (0-based in out.Lines)
-	// as a viewport row: the jump scrolls to renderLine-1, so the heading
-	// text sits one row below the top and the bar rides beside it.
-	r := m.outline.entries[m.outline.sel].renderLine - m.content.YOffset
-	if 0 <= r && r < m.content.Height {
+	// as a pane row: the jump scrolls to renderLine-1, so the heading text
+	// sits one row below the viewport top — and the pane's padding row
+	// shifts it one further.
+	r := m.outline.entries[m.outline.sel].renderLine - m.content.YOffset + 1
+	if 0 <= r && r < m.paneHeight {
 		rows[r] = gutterBarStyle.Render("▌")
 	}
 	return strings.Join(rows, "\n")
 }
 
 func (m Model) outlineView() string {
-	return m.outline.view(m.content.Height, m.focus == focusOutline)
+	return m.outline.view(m.paneHeight, m.focus == focusOutline)
 }
 
 func (m Model) sepView() string {

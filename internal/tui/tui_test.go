@@ -69,9 +69,13 @@ func TestViewerLayout(t *testing.T) {
 		!strings.HasPrefix(ansi.Strip(lines[len(lines)-1]), "└") {
 		t.Fatalf("frame lines missing: first=%q last=%q", lines[0], lines[len(lines)-1])
 	}
-	// Viewer viewport: window height minus the two frame lines.
-	if m.content.Height != 38 {
-		t.Fatalf("viewer viewport height = %d, want 38", m.content.Height)
+	// Viewer viewport: the pane height minus the content's two padding
+	// rows; the panes themselves span the full pane height.
+	if m.content.Height != 36 {
+		t.Fatalf("viewer viewport height = %d, want 36", m.content.Height)
+	}
+	if m.paneHeight != 38 {
+		t.Fatalf("pane height = %d, want 38", m.paneHeight)
 	}
 }
 
