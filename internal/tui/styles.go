@@ -93,8 +93,10 @@ func buildStyles() {
 		Foreground(lipgloss.Color(t.TextMuted)).
 		Background(lipgloss.Color(t.BackgroundPanel))
 
+	// The hairline above the footer shares the Separator tone with the
+	// sidebar border and exec output separator.
 	sepStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Border))
+		Foreground(lipgloss.Color(t.Separator))
 
 	infoStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted))
