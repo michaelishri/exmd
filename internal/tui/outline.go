@@ -142,9 +142,10 @@ const panePad = 1
 // row, the document's first h1 as the title row (two columns in), a blank
 // pad row, then the entries, with blank rows padding the bottom. While the
 // sidebar holds focus, its top and bottom pad tiles are decorated with the
-// border lines — same rows, same panel background — and the vertical
-// border columns (from the adjacent gutter and margin columns) share the
-// panel background, so nothing shifts when focus moves.
+// border lines — same rows, drawn on the page background so the sidebar's
+// color stops at the border — and the vertical border columns (from the
+// adjacent gutter and margin columns) match. Nothing shifts when focus
+// moves.
 func (o *outlineModel) view(height int, focused bool) string {
 	if !o.visible {
 		return ""
