@@ -318,6 +318,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		case "enter":
+			// Enter keeps its original meaning: jump the content to the
+			// highlighted heading. Backtick enters code-block selection.
+			m.jumpToSelected()
+			return nil, true
+		case "`":
 			// Enter executable-block selection: the first code block at or
 			// after the highlighted heading, arrows walking the blocks.
 			m.enterBlockMode()
@@ -353,9 +358,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 	}
 
-	// Enter selects the first executable block at or after the sidebar's
-	// highlighted heading (the document's first when none follows).
-	if m.blockSel < 0 && msg.String() == "enter" && len(m.out.Blocks) > 0 {
+	// Backtick selects the first executable block at or after the
+	// sidebar's highlighted heading (the document's first when none
+	// follows).
+	if m.blockSel < 0 && msg.String() == "`" && len(m.out.Blocks) > 0 {
 		m.enterBlockMode()
 		return nil, true
 	}

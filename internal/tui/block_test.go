@@ -20,34 +20,46 @@ func focusSidebarAndSelectFirstHeading(t *testing.T, m Model) Model {
 }
 
 // enterBlockModeFromFirstHeading selects the first heading in the sidebar
-// and presses enter, starting executable-block selection at the demo's
+// and presses backtick, starting executable-block selection at the demo's
 // first code block.
 func enterBlockModeFromFirstHeading(t *testing.T, m Model) Model {
 	t.Helper()
 	got := focusSidebarAndSelectFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
 	return mm.(Model)
 }
 
-// TestEnterSelectsFirstBlock checks that enter on a highlighted heading
+// TestBacktickSelectsFirstBlock checks that backtick on a highlighted heading
 // starts executable-block selection at the first code block at or after
 // that heading, and moves focus to the text area.
-func TestEnterSelectsFirstBlock(t *testing.T) {
+func TestBacktickSelectsFirstBlock(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := focusSidebarAndSelectFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
 	got = mm.(Model)
 
 	if got.blockSel != 0 {
 		t.Fatalf("blockSel = %d, want 0 (the first block at or after the heading)", got.blockSel)
 	}
 	if got.focus != focusContent {
-		t.Fatal("enter should move focus to the text area")
+		t.Fatal("backtick should move focus to the text area")
 	}
 }
 
 // TestArrowsMoveBlocks checks that the arrows walk the executable blocks
 // with clamps at the ends, and g/G jump to the first and last.
+// TestEnterJumpsToHeading checks that enter keeps its original meaning
+// instead of activating code-block selection.
+func TestEnterJumpsToHeading(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	got := focusSidebarAndSelectFirstHeading(t, m)
+	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got = mm.(Model)
+	if got.blockSel != -1 {
+		t.Fatalf("enter should not activate block mode (blockSel = %d)", got.blockSel)
+	}
+}
+
 func TestArrowsMoveBlocks(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
@@ -297,7 +309,7 @@ func TestInlineFailureRailTurnsRed(t *testing.T) {
 	// last heading; move to the first one explicitly.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	got = mm.(Model)
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
 	got = mm.(Model)
 	// Down to the second block, which exits non-zero.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
