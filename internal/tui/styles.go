@@ -152,12 +152,12 @@ func buildStyles() {
 	railFailActiveStyle = railFailStyle.
 		Foreground(lipgloss.Color("#ff9b9b")).Bold(true)
 
-	// sideBorderStyle draws the sidebar's focus border: a single primary
-	// line along the strip's left edge.
+	// The sidebar border and the exec block's output separator share the
+	// same bright chrome tone.
 	sideBorderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
+		Foreground(lipgloss.Color(t.Separator))
 
 	execEdgeStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted)).
+		Foreground(lipgloss.Color(t.Separator)).
 		Background(lipgloss.Color(render.ExecColor()))
 }

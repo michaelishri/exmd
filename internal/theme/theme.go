@@ -25,6 +25,9 @@ type Theme struct {
 	// Border is the one hairline separator color used in the UI (above the
 	// status bar).
 	Border Color
+	// Separator is a bright chrome tone for hairline separators, halfway
+	// between TextMuted and white.
+	Separator Color
 
 	Text      Color
 	TextMuted Color
@@ -48,6 +51,7 @@ var Dark = Theme{
 	BackgroundPanel:   "#18181e",
 	BackgroundElement: "#24242c",
 	Border:            "#2b2b34",
+	Separator:         "#c3c3c7",
 	Text:              "#e4e4e9",
 	TextMuted:         "#87878f",
 	Primary:           "#8f8af4",

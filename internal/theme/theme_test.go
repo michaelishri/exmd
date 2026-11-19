@@ -49,6 +49,7 @@ func TestNottyTokensEmpty(t *testing.T) {
 			"BackgroundPanel":   th.BackgroundPanel,
 			"BackgroundElement": th.BackgroundElement,
 			"Border":            th.Border,
+			"Separator":         th.Separator,
 			"Text":              th.Text,
 			"TextMuted":         th.TextMuted,
 			"Primary":           th.Primary,
