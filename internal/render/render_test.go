@@ -138,13 +138,18 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	if strings.Contains(plain, "48;2;24;24;30") || strings.TrimSpace(ansi.Strip(plain)) != "" {
 		t.Fatalf("no plain spacing row below the block: %q", plain)
 	}
-	// Code lines line up with the heading that owns the block.
+	// The code text stays indented inside its shaded box: glamour's
+	// two-column block margin, with the first column carrying the exec
+	// background (so the block reads as an indented surface).
+	if !strings.HasPrefix(code, "\x1b[48;2;24;24;30m") {
+		t.Fatalf("the first column of a code row should carry the background: %q", code)
+	}
 	leading := func(s string) int {
 		v := ansi.Strip(s)
 		return len(v) - len(strings.TrimLeft(v, " "))
 	}
-	if leading(code) != leading(out.Lines[out.Headings[1].Line]) {
-		t.Fatalf("code indented %d spaces, heading %d", leading(code), leading(out.Lines[out.Headings[1].Line]))
+	if want := leading(out.Lines[out.Headings[1].Line]) + 2; leading(code) != want {
+		t.Fatalf("code indented %d spaces, want %d (heading + block margin)", leading(code), want)
 	}
 }
 

@@ -120,10 +120,6 @@ func darkStyle() gansi.StyleConfig {
 	c.HorizontalRule.Color = strPtr("#3a3a44")
 
 	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(panel)
-	// Glamour's dark style gives code blocks a two-column margin; the
-	// prose around them has none, which pushed code out of alignment with
-	// its heading. Remove it.
-	c.CodeBlock.Margin = uintPtr(0)
 	c.Code.StylePrimitive.BackgroundColor = strPtr(panel)
 
 	return c
