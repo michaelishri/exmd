@@ -146,32 +146,42 @@ func TestEscapeReturnsToHeading(t *testing.T) {
 	}
 }
 
-// TestRunSelectedBlock checks that r on a highlighted block runs exactly
-// that block in run mode.
-func TestRunSelectedBlock(t *testing.T) {
+// TestRunSelectedBlockInline checks that r executes the highlighted block
+// in place, appending its output under the code rather than switching to
+// run mode.
+func TestRunSelectedBlockInline(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
-	// Move to the second block and run it.
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
-	got = mm.(Model)
 	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
 	got = mm.(Model)
-	if got.mode != modeRun {
-		t.Fatal("r did not enter run mode")
+	if got.mode != modeView {
+		t.Fatal("inline execution should stay in the document view")
 	}
 	got = pump(t, got, cmd)
 
-	if got.run.result == nil || got.run.result.Failed != nil {
-		t.Fatalf("run failed: %+v", got.run.result)
+	if !got.inline.done {
+		t.Fatal("inline run did not finish")
 	}
-	if got.run.result.BlocksRun != 1 {
-		t.Fatalf("blocks run = %d, want 1 (the selected block only)", got.run.result.BlocksRun)
+	if got.inline.err != nil || (got.inline.result != nil && got.inline.result.Failed != nil) {
+		t.Fatalf("inline run failed: %v / %+v", got.inline.err, got.inline.result)
 	}
-	if !got.run.blocks[1].hasEnd {
-		t.Fatal("the selected block did not run")
+	joined := strings.Join(got.inline.lines, "\n")
+	if !strings.Contains(joined, "author:  Michael Ishri") {
+		t.Fatalf("block output missing: %q", joined)
 	}
-	if got.run.blocks[0].hasEnd {
-		t.Fatal("an unselected block ran")
+
+	// The output box is spliced right after the block's last line: a
+	// separator, then the output rows.
+	lines := got.contentLines()
+	bm := got.out.Blocks[0]
+	if len(lines) != len(got.out.Lines)+len(got.inline.box) {
+		t.Fatalf("content lines = %d, want %d", len(lines), len(got.out.Lines)+len(got.inline.box))
+	}
+	if !strings.Contains(ansi.Strip(lines[bm.End]), "─") {
+		t.Fatalf("no separator at the block's end: %q", ansi.Strip(lines[bm.End]))
+	}
+	if !strings.Contains(ansi.Strip(lines[bm.End+1]), "author:") {
+		t.Fatalf("output not directly under the separator: %q", ansi.Strip(lines[bm.End+1]))
 	}
 }

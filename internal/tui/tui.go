@@ -66,6 +66,9 @@ type Model struct {
 	// (index into the document's blocks); -1 when block selection is off.
 	blockSel int
 
+	// inline is the live in-place execution of one block and its output.
+	inline inlineState
+
 	// paneHeight is the height of the body panes (rail, gutter, sidebar,
 	// content block including its padding rows); the viewport itself shows
 	// paneHeight minus the content's two padding rows.
@@ -119,6 +122,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runClosedMsg:
 		return m, nil // drained concurrently with runDoneMsg; no-op
 
+	case inlineEventMsg:
+		m.applyInlineEvent(msg.ev)
+		if m.inline.active {
+			return m, m.inlineListenCmd()
+		}
+		return m, nil
+
+	case inlineDoneMsg:
+		m.finalizeInline(msg.result, nil)
+		return m, nil
+
+	case inlineErrMsg:
+		m.finalizeInline(nil, msg.err)
+		return m, nil
+
 	case tea.KeyMsg:
 		if cmd, handled := m.handleKey(msg); handled {
 			return m, cmd
@@ -154,12 +172,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return tea.Quit, true
 
 	case "r":
-		if m.run.active {
+		if m.run.active || m.inline.active {
 			return nil, true
 		}
 		if m.mode != modeRun && m.blockSel >= 0 {
-			// Run just the highlighted executable block.
-			return m.beginBlockRun(), true
+			// Execute the highlighted block in place, under the code.
+			return m.beginInlineRun(), true
 		}
 		if m.mode != modeRun {
 			if len(m.doc.Blocks) == 0 {
@@ -196,6 +214,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.stepCmd(), true
 
 	case "s":
+		if m.inline.active && m.inline.cancel != nil {
+			m.inline.cancel()
+		}
 		if m.mode == modeRun && m.run.active && m.run.cancel != nil {
 			// §4.7: the engine terminates the current process group and
 			// the run stops there.
@@ -410,7 +431,8 @@ func (m *Model) relayout() {
 	}
 
 	if m.out != nil {
-		m.content.SetContent(strings.Join(m.out.Lines, "\n"))
+		m.rebuildInlineBox()
+		m.setContent()
 		m.outline.rebuild(m.doc, m.out, m.sidebarWidth)
 	}
 
@@ -436,7 +458,7 @@ func (m *Model) jumpToSelected() {
 	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
 		return
 	}
-	y := clamp(m.outline.entries[m.outline.sel].renderLine-1, 0, m.maxScroll())
+	y := clamp(m.displayLine(m.outline.entries[m.outline.sel].renderLine)-1, 0, m.maxScroll())
 	m.content.SetYOffset(y)
 }
 
@@ -502,22 +524,26 @@ func (m *Model) revealBlock() {
 	bm := m.out.Blocks[m.blockSel]
 	top := m.content.YOffset
 	bottom := top + m.content.Height
+	// Compare in display coordinates, accounting for an inline output box
+	// inserted earlier in the document.
+	line, end := m.displayLine(bm.Line), m.displayLine(bm.End)
 	switch {
-	case bm.Line >= top && bm.End <= bottom:
+	case line >= top && end <= bottom:
 		return // already fully visible
-	case bm.Line < top:
+	case line < top:
 		// Above the viewport: pin its badge to the top.
-		m.content.SetYOffset(clamp(bm.Line, 0, m.maxScroll()))
+		m.content.SetYOffset(clamp(line, 0, m.maxScroll()))
 	default:
 		// Below the viewport: pin its last line to the bottom.
-		m.content.SetYOffset(clamp(bm.End-m.content.Height, 0, m.maxScroll()))
+		m.content.SetYOffset(clamp(end-m.content.Height, 0, m.maxScroll()))
 	}
 }
+
 func (m *Model) maxScroll() int {
 	if m.out == nil {
 		return 0
 	}
-	return max(0, len(m.out.Lines)-m.content.Height)
+	return max(0, len(m.contentLines())-m.content.Height)
 }
 
 // updateSpy mirrors the content scroll position into the sidebar cursor:
@@ -534,7 +560,7 @@ func (m *Model) updateSpy() {
 		// has no entry (it is the title row), so nothing is selected while
 		// the reader is inside its section.
 		for i, e := range m.outline.entries {
-			if e.renderLine <= off+1 {
+			if m.displayLine(e.renderLine) <= off+1 {
 				idx = i
 			} else {
 				break
@@ -545,7 +571,7 @@ func (m *Model) updateSpy() {
 		}
 	} else {
 		for i, b := range m.out.Blocks {
-			if b.Line <= off+1 {
+			if m.displayLine(b.Line) <= off+1 {
 				idx = i
 			} else {
 				break
@@ -661,8 +687,8 @@ func (m Model) railView() string {
 	// below the metadata/badge row — through its last line.
 	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
 		bm := m.out.Blocks[m.blockSel]
-		start := bm.Line + 1 - m.content.YOffset + 1
-		end := bm.End - m.content.YOffset + 1
+		start := m.displayLine(bm.Line+1) - m.content.YOffset + 1
+		end := m.displayLine(bm.End) - m.content.YOffset + 1
 		for r := 0; r < m.paneHeight; r++ {
 			if r >= start && r < end {
 				rows[r] = gutterBarStyle.Render("▌")
@@ -679,11 +705,57 @@ func (m Model) railView() string {
 	// as a pane row: the jump scrolls to renderLine-1, so the heading text
 	// sits one row below the viewport top — and the pane's padding row
 	// shifts it one further.
-	r := m.outline.entries[m.outline.sel].renderLine - m.content.YOffset + 1
+	r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset + 1
 	if 0 <= r && r < m.paneHeight {
 		rows[r] = gutterBarStyle.Render("▌")
 	}
 	return strings.Join(rows, "\n")
+}
+
+// setContent installs the document lines, with the inline output box spliced
+// under its block, into the viewport.
+func (m *Model) setContent() {
+	m.content.SetContent(strings.Join(m.contentLines(), "\n"))
+}
+
+// contentLines returns the rendered document with the inline output box
+// inserted at the end of the executing block.
+func (m Model) contentLines() []string {
+	if m.out == nil {
+		return nil
+	}
+	at := m.inlineInsertAt()
+	out := make([]string, 0, len(m.out.Lines)+len(m.inline.box))
+	for i, l := range m.out.Lines {
+		out = append(out, l)
+		if i == at {
+			out = append(out, m.inline.box...)
+		}
+	}
+	return out
+}
+
+// inlineInsertAt is the rendered line index where the output box is spliced
+// (just after the executing block's last line), or -1 when there is none.
+func (m Model) inlineInsertAt() int {
+	if m.out == nil || (len(m.inline.box) == 0) {
+		return -1
+	}
+	if m.inline.index < 0 || m.inline.index >= len(m.out.Blocks) {
+		return -1
+	}
+	// Insert after the block's shaded blank row, before its trailing
+	// spacing row, so the output reads as attached to the block.
+	return m.out.Blocks[m.inline.index].End - 1
+}
+
+// displayLine maps a rendered line index to its position after an inline
+// output box has been spliced into the content.
+func (m Model) displayLine(line int) int {
+	if at := m.inlineInsertAt(); at >= 0 && line >= at {
+		return line + len(m.inline.box)
+	}
+	return line
 }
 
 func (m Model) outlineView() string {

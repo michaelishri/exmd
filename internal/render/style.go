@@ -166,6 +166,10 @@ func paintExecLines(lines []string, width int) {
 	}
 }
 
+// ExecColor returns the executable block surface color, for UI elements
+// attached to a block (such as its inline output area).
+func ExecColor() string { return execPanel }
+
 func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool    { return &b }
 func uintPtr(u uint) *uint    { return &u }

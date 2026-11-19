@@ -97,43 +97,6 @@ func (m *Model) resetRun() {
 	m.run = runState{blocks: blocks, globals: map[string]string{}}
 }
 
-// beginBlockRun runs the executable block highlighted in the text area: a
-// fresh session executes that block in isolation — the launch-time state
-// (§2.2–§4.2), the harvest applying to it (§4.3). Afterwards run mode's
-// usual continue/step keys apply to the remaining blocks.
-func (m *Model) beginBlockRun() tea.Cmd {
-	if m.blockSel < 0 || m.blockSel >= len(m.doc.Blocks) {
-		return nil
-	}
-	m.mode = modeRun
-	m.focus = focusContent
-	m.resetRun()
-	m.relayout()
-
-	s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
-	if err != nil {
-		m.run.err = err
-		m.run.finished = true
-		m.setRunContent()
-		return nil
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.run.session, m.run.ctx, m.run.cancel = s, ctx, cancel
-
-	ch := make(chan exec.Event, eventChanBuffer)
-	m.run.ch = ch
-	m.run.active = true
-	emit := func(ev exec.Event) { ch <- ev }
-	index := m.blockSel
-
-	runCmd := func() tea.Msg {
-		m.run.session.RunBlock(ctx, index, emit)
-		close(ch)
-		return runDoneMsg{m.run.session.Result()}
-	}
-	return tea.Batch(runCmd, m.listenCmd())
-}
-
 // beginRun enters run mode with a fresh session; runAll launches every
 // remaining block, otherwise the run starts empty (step mode).
 func (m *Model) beginRun(runAll bool) tea.Cmd {
