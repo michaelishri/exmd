@@ -36,6 +36,9 @@ var (
 	// gutterBarStyle colors the selection rail at the left edge of the
 	// text area.
 	gutterBarStyle lipgloss.Style
+
+	// frameStyle draws the border around the entire viewport.
+	frameStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -99,4 +102,7 @@ func buildStyles() {
 
 	gutterBarStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
+
+	frameStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Border))
 }

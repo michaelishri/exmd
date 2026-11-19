@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/md-exec/internal/doc"
 )
@@ -42,31 +43,33 @@ func TestViewerLayout(t *testing.T) {
 	if m.outline.width != 50 {
 		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-50-gutterWidth-2 {
+	if m.content.Width != 120-50-gutterWidth-railWidth-1-2*frameWidth {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()
 	// The reading surface is content + sidebar only: no header row (title,
-	// path, chips), no sidebar title, no footer, no focus rings.
+	// path, chips), no footer.
 	if strings.Contains(v, "spec v1") || strings.Contains(v, "examples/demo/demo.md") {
 		t.Fatal("header chrome leaked into the view")
 	}
 	if strings.Contains(v, "j/k scroll") || strings.Contains(v, "q quit") {
 		t.Fatal("footer should be gone")
 	}
-	if strings.Contains(v, "┌") || strings.Contains(v, "└") {
-		t.Fatal("focus rings should be gone")
+	// The viewport is framed: exactly one border box around the body.
+	if n := strings.Count(v, "┌"); n != 1 {
+		t.Fatalf("viewport frames = %d, want exactly 1", n)
 	}
 	// The document itself is still there (the h1 renders in the content).
 	if !strings.Contains(v, "md-exec feature tour") {
 		t.Fatal("document content missing")
 	}
-	// The panes float: one blank row above and below the body.
+	// The former margin rows are now the frame's top and bottom lines.
 	lines := strings.Split(v, "\n")
-	if strings.TrimSpace(lines[0]) != "" || strings.TrimSpace(lines[len(lines)-1]) != "" {
-		t.Fatalf("missing blank margin rows: first=%q last=%q", lines[0], lines[len(lines)-1])
+	if !strings.HasPrefix(ansi.Strip(lines[0]), "┌") ||
+		!strings.HasPrefix(ansi.Strip(lines[len(lines)-1]), "└") {
+		t.Fatalf("frame lines missing: first=%q last=%q", lines[0], lines[len(lines)-1])
 	}
-	// Viewer viewport: window height minus the two margin rows.
+	// Viewer viewport: window height minus the two frame lines.
 	if m.content.Height != 38 {
 		t.Fatalf("viewer viewport height = %d, want 38", m.content.Height)
 	}

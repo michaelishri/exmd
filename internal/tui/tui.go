@@ -26,6 +26,7 @@ const (
 	sidebarCols     = 50
 	gutterWidth     = 2
 	railWidth       = 1
+	frameWidth      = 1
 )
 
 type focusArea int
@@ -314,10 +315,13 @@ func (m *Model) relayout() {
 	m.sidebarWidth = sidebarW
 	contentW := w
 	if m.outline.visible {
-		// Even outer padding around the sidebar: 2-col gutter on the left,
-		// 1-col margin on the right. The text area carries a 1-column
-		// selection rail at its left edge.
-		contentW = w - sidebarW - gutterWidth - 1 - railWidth
+		if m.mode == modeRun {
+			contentW = w - sidebarW - gutterWidth
+		} else {
+			// 2-col gutter, 1-col rail, 1-col right margin, and the
+			// frame's two border columns.
+			contentW = w - sidebarW - gutterWidth - railWidth - 1 - 2*frameWidth
+		}
 	}
 	contentW = max(10, contentW)
 
@@ -436,11 +440,29 @@ func (m Model) View() string {
 		sb.WriteString(m.runStatus())
 		return sb.String()
 	}
-	// The viewer floats the panes with one blank row above and below.
+	// The viewer frames the viewport: the former margin rows are the
+	// border's top and bottom lines.
+	sb.WriteString(m.frameTop())
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
 	sb.WriteByte('\n')
+	sb.WriteString(m.frameBottom())
 	return sb.String()
+}
+
+// frameTop renders the viewport frame's top line, spanning the window.
+func (m Model) frameTop() string {
+	return frameStyle.Render("┌" + strings.Repeat("─", max(1, m.width-2)) + "┐")
+}
+
+// frameBottom renders the viewport frame's bottom line.
+func (m Model) frameBottom() string {
+	return frameStyle.Render("└" + strings.Repeat("─", max(1, m.width-2)) + "┘")
+}
+
+// frameSide renders one row of the viewport frame's side columns.
+func frameSide() string {
+	return frameStyle.Render("│")
 }
 
 func (m Model) bodyView() string {
@@ -478,12 +500,18 @@ func (m Model) bodyView() string {
 	for i := range margin {
 		margin[i] = " "
 	}
+	side := make([]string, m.content.Height)
+	for i := range side {
+		side[i] = frameSide()
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
+		strings.Join(side, "\n"),
 		m.railView(),
 		content,
 		strings.Join(gutter, "\n"),
 		m.outlineView(),
 		strings.Join(margin, "\n"),
+		strings.Join(side, "\n"),
 	)
 }
 

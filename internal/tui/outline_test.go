@@ -94,15 +94,18 @@ func TestRailMarksHeadingLine(t *testing.T) {
 
 	// The jump put the heading one row below the viewport top (its blank
 	// separator row is at the top): exactly one bar, on the same body row
-	// as the heading's text, at the rail column.
+	// as the heading's text, just inside the frame's left column.
 	v := got.View()
 	if n := strings.Count(v, "▌"); n != 1 {
 		t.Fatalf("bar rows = %d, want 1", n)
 	}
 	for _, line := range strings.Split(v, "\n") {
 		if strings.Contains(line, "## 1. Preflight and point-of-use guards") {
-			if bar := strings.Index(line, "▌"); bar != 0 {
-				t.Fatalf("bar not on the heading's row (column %d): %q", bar, line)
+			// Measure the display column, not the byte offset (the glyphs
+			// are multi-byte runes).
+			stripped := ansi.Strip(line)
+			if i := strings.Index(stripped, "▌"); ansi.StringWidth(stripped[:i]) != frameWidth {
+				t.Fatalf("bar not beside the heading's row: %q", line)
 			}
 			return
 		}
