@@ -101,6 +101,7 @@ func (m *Model) resetRun() {
 // remaining block, otherwise the run starts empty (step mode).
 func (m *Model) beginRun(runAll bool) tea.Cmd {
 	m.mode = modeRun
+	m.focus = focusContent
 	m.resetRun()
 	// Run mode keeps the hairline + status bar for run state, so the pane
 	// heights differ from the viewer's.

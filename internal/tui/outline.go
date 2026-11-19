@@ -141,9 +141,10 @@ const panePad = 1
 // view renders the sidebar as a full-height shaded column: a blank pad
 // row, the document's first h1 as the title row (two columns in), a blank
 // pad row, then the entries inset one blank row at the bottom of the
-// column. The viewer's outer margins (one row top/bottom, one column
-// right) sit outside the strip.
-func (o *outlineModel) view(height int) string {
+// column. While the sidebar holds focus, its top and bottom pad rows
+// become the sidebar border's horizontal lines (the vertical columns come
+// from the adjacent gutter and margin columns).
+func (o *outlineModel) view(height int, focused bool) string {
 	if !o.visible {
 		return ""
 	}
@@ -158,7 +159,14 @@ func (o *outlineModel) view(height int) string {
 		}
 	}
 
-	// Blank pad, then the title row, then a blank pad.
+	// Top pad — the sidebar border's top line while focused.
+	if focused {
+		setRow(0, sideBorderStyle.Render(strings.Repeat("─", o.width)))
+	} else {
+		setRow(0, rowStyle.Width(o.width).Render(""))
+	}
+
+	// Title row: the document's first h1, two columns in.
 	const titlePad = 2
 	setRow(1, sideTitleStyle.Width(o.width).Render(
 		strings.Repeat(" ", titlePad)+ansi.Truncate(o.title, o.width-titlePad-1, "…")))
@@ -225,6 +233,10 @@ func (o *outlineModel) view(height int) string {
 			}
 			setRow(row, rowBg.Width(o.width).Render(pad+text))
 		}
+	}
+	// Bottom pad — the sidebar border's bottom line while focused.
+	if focused {
+		setRow(height-1, sideBorderStyle.Render(strings.Repeat("─", o.width)))
 	}
 	return strings.Join(rows, "\n")
 }

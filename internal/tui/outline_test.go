@@ -20,7 +20,7 @@ import (
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
-	v := m.outline.view(rows)
+	v := m.outline.view(rows, false)
 	lines := strings.Split(v, "\n")
 	if len(lines) != rows {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
@@ -113,6 +113,29 @@ func TestRailMarksHeadingLine(t *testing.T) {
 	t.Fatal("heading row not found in the view")
 }
 
+// TestFocusBorderMoves checks the focus representation: with the text area
+// focused there is exactly one box (the viewport frame); tab moves focus to
+// the sidebar, which gains its own border (a second box); tab back removes
+// it.
+func TestFocusBorderMoves(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	if n := strings.Count(m.View(), "┌"); n != 1 {
+		t.Fatalf("boxes = %d, want 1 (viewport frame only)", n)
+	}
+
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	got := mm.(Model)
+	if n := strings.Count(got.View(), "┌"); n != 2 {
+		t.Fatalf("boxes after tab = %d, want 2 (frame + sidebar border)", n)
+	}
+
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyTab})
+	got = mm.(Model)
+	if n := strings.Count(got.View(), "┌"); n != 1 {
+		t.Fatalf("boxes after tab back = %d, want 1", n)
+	}
+}
+
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
 // shift its text: the stripped row is identical before and after, and the
 // background carries the selection instead.
@@ -122,13 +145,13 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	before := strings.Split(m.outline.view(m.content.Height), "\n")
+	before := strings.Split(m.outline.view(m.content.Height, false), "\n")
 
 	// Focus the sidebar and select the first entry.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	got := mm.(Model)
-	after := strings.Split(got.outline.view(got.content.Height), "\n")
+	after := strings.Split(got.outline.view(got.content.Height, false), "\n")
 
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
@@ -176,7 +199,7 @@ More text after the h1.
 	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "An h2 comes first" {
 		t.Fatalf("entries = %+v, want only the h2", m.outline.entries)
 	}
-	v := m.outline.view(m.content.Height)
+	v := m.outline.view(m.content.Height, false)
 	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
 	}
@@ -200,7 +223,7 @@ func TestHeadingRowShading(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	v := m.outline.view(m.content.Height)
+	v := m.outline.view(m.content.Height, false)
 	lines := strings.Split(v, "\n")
 
 	// Entries start at row 3: entry 0 is an h2 (1. Preflight…), entry 5 is

@@ -441,7 +441,7 @@ func (m Model) View() string {
 		return sb.String()
 	}
 	// The viewer frames the viewport: the former margin rows are the
-	// border's top and bottom lines.
+	// border's top and bottom lines, colored by focus.
 	sb.WriteString(m.frameTop())
 	sb.WriteByte('\n')
 	sb.WriteString(m.bodyView())
@@ -450,19 +450,28 @@ func (m Model) View() string {
 	return sb.String()
 }
 
+// frameStyleFor picks the viewport frame color: primary while the text
+// area holds focus (the frame is the text area's border), muted otherwise.
+func (m Model) frameStyleFor() lipgloss.Style {
+	if m.mode == modeView && m.focus == focusContent {
+		return focusFrameStyle
+	}
+	return frameStyle
+}
+
 // frameTop renders the viewport frame's top line, spanning the window.
 func (m Model) frameTop() string {
-	return frameStyle.Render("┌" + strings.Repeat("─", max(1, m.width-2)) + "┐")
+	return m.frameStyleFor().Render("┌" + strings.Repeat("─", max(1, m.width-2)) + "┐")
 }
 
 // frameBottom renders the viewport frame's bottom line.
 func (m Model) frameBottom() string {
-	return frameStyle.Render("└" + strings.Repeat("─", max(1, m.width-2)) + "┘")
+	return m.frameStyleFor().Render("└" + strings.Repeat("─", max(1, m.width-2)) + "┘")
 }
 
-// frameSide renders one row of the viewport frame's side columns.
-func frameSide() string {
-	return frameStyle.Render("│")
+// frameSideRow renders one row of the viewport frame's side columns.
+func (m Model) frameSideRow() string {
+	return m.frameStyleFor().Render("│")
 }
 
 func (m Model) bodyView() string {
@@ -493,16 +502,27 @@ func (m Model) bodyView() string {
 		return content
 	}
 	gutter := make([]string, m.content.Height)
-	for i := range gutter {
-		gutter[i] = strings.Repeat(" ", gutterWidth)
-	}
 	margin := make([]string, m.content.Height)
-	for i := range margin {
-		margin[i] = " "
-	}
 	side := make([]string, m.content.Height)
-	for i := range side {
-		side[i] = frameSide()
+	focused := m.focus == focusOutline
+	for i := range gutter {
+		switch {
+		case !focused:
+			gutter[i] = strings.Repeat(" ", gutterWidth)
+			margin[i] = " "
+		case i == 0:
+			// The border hugs the sidebar: the corner columns sit in the
+			// gutter's right column and the margin column.
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("┌")
+			margin[i] = sideBorderStyle.Render("┐")
+		case i == m.content.Height-1:
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("└")
+			margin[i] = sideBorderStyle.Render("┘")
+		default:
+			gutter[i] = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
+			margin[i] = sideBorderStyle.Render("│")
+		}
+		side[i] = m.frameSideRow()
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		strings.Join(side, "\n"),
@@ -540,7 +560,7 @@ func (m Model) railView() string {
 }
 
 func (m Model) outlineView() string {
-	return m.outline.view(m.content.Height)
+	return m.outline.view(m.content.Height, m.focus == focusOutline)
 }
 
 func (m Model) sepView() string {
