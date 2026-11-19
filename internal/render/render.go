@@ -30,6 +30,7 @@ type HeadingMark struct {
 // Index i corresponds to Document.Blocks[i].
 type BlockMark struct {
 	Line     int // 0-based rendered line index
+	End      int // exclusive rendered line after the block's last line
 	Label    string
 	BlockRef *doc.Block
 }
@@ -106,6 +107,28 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 		default:
 			out.appendGlamour(chunk, width, style)
 		}
+	}
+
+	// Each block's rendered extent ends where the next chunk starts: the
+	// next heading or block mark, minus the separator blank that precedes
+	// it; the final block runs to the end of the output.
+	marks := make([]int, 0, len(out.Headings)+len(out.Blocks))
+	for _, hm := range out.Headings {
+		marks = append(marks, hm.Line)
+	}
+	for i := range out.Blocks {
+		marks = append(marks, out.Blocks[i].Line)
+	}
+	sort.Ints(marks)
+	for i := range out.Blocks {
+		end := len(out.Lines)
+		for _, m := range marks {
+			if m > out.Blocks[i].Line {
+				end = m - 1
+				break
+			}
+		}
+		out.Blocks[i].End = end
 	}
 	return out, nil
 }

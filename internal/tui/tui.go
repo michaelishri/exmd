@@ -62,6 +62,10 @@ type Model struct {
 	overrides map[string]string
 	theme     theme.Theme
 
+	// blockSel is the executable block highlighted in the text area
+	// (index into the document's blocks); -1 when block selection is off.
+	blockSel int
+
 	// paneHeight is the height of the body panes (rail, gutter, sidebar,
 	// content block including its padding rows); the viewport itself shows
 	// paneHeight minus the content's two padding rows.
@@ -80,6 +84,7 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		mode:      modeView,
 		overrides: overrides,
 		theme:     t,
+		blockSel:  -1,
 		run:       runState{globals: map[string]string{}},
 	}
 	m.content.MouseWheelEnabled = true
@@ -152,6 +157,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if m.run.active {
 			return nil, true
 		}
+		if m.mode != modeRun && m.blockSel >= 0 {
+			// Run just the highlighted executable block.
+			return m.beginBlockRun(), true
+		}
 		if m.mode != modeRun {
 			if len(m.doc.Blocks) == 0 {
 				return nil, true
@@ -195,6 +204,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "v", "esc":
+		if m.blockSel >= 0 {
+			// Leave executable-block selection; the heading the block
+			// belongs to is highlighted again.
+			m.exitBlockMode()
+			return nil, true
+		}
 		if m.mode == modeRun && !m.run.active {
 			m.mode = modeView
 			m.relayout()
@@ -279,10 +294,46 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		case "enter":
-			m.jumpToSelected()
+			// Enter executable-block selection: the first code block at or
+			// after the highlighted heading, arrows walking the blocks.
+			m.enterBlockMode()
 			return nil, true
 		}
 		return nil, true // outline focus consumes keys
+	}
+
+	// Executable-block selection: the arrows walk the code blocks, g/G
+	// jump to the first and last, and r runs the highlighted block.
+	if m.blockSel >= 0 {
+		switch msg.String() {
+		case "down", "j":
+			if m.blockSel < len(m.out.Blocks)-1 {
+				m.blockSel++
+				m.jumpToBlock()
+			}
+			return nil, true
+		case "up", "k":
+			if m.blockSel > 0 {
+				m.blockSel--
+				m.jumpToBlock()
+			}
+			return nil, true
+		case "g":
+			m.blockSel = 0
+			m.jumpToBlock()
+			return nil, true
+		case "G":
+			m.blockSel = len(m.out.Blocks) - 1
+			m.jumpToBlock()
+			return nil, true
+		}
+	}
+
+	// Enter selects the first executable block at or after the sidebar's
+	// highlighted heading (the document's first when none follows).
+	if m.blockSel < 0 && msg.String() == "enter" && len(m.out.Blocks) > 0 {
+		m.enterBlockMode()
+		return nil, true
 	}
 
 	switch msg.String() {
@@ -363,7 +414,9 @@ func (m *Model) relayout() {
 		m.outline.rebuild(m.doc, m.out, m.sidebarWidth)
 	}
 
-	if m.laidOut && len(m.outline.entries) > 0 {
+	if m.blockSel >= 0 {
+		m.jumpToBlock()
+	} else if m.laidOut && len(m.outline.entries) > 0 {
 		sel := clamp(m.outline.sel, 0, len(m.outline.entries)-1)
 		m.outline.sel = sel
 		m.jumpToSelected()
@@ -384,6 +437,67 @@ func (m *Model) jumpToSelected() {
 		return
 	}
 	y := clamp(m.outline.entries[m.outline.sel].renderLine-1, 0, m.maxScroll())
+	m.content.SetYOffset(y)
+}
+
+// enterBlockMode selects the first executable block at or after the
+// sidebar's highlighted heading — the document's first when none follows —
+// and moves focus to the text area, where the arrows walk the blocks.
+func (m *Model) enterBlockMode() {
+	if m.out == nil || len(m.out.Blocks) == 0 {
+		return
+	}
+	m.blockSel = 0
+	if m.outline.sel >= 0 && m.outline.sel < len(m.outline.entries) {
+		line := m.outline.entries[m.outline.sel].renderLine
+		for i, b := range m.out.Blocks {
+			if b.Line >= line {
+				m.blockSel = i
+				break
+			}
+		}
+	}
+	m.focus = focusContent
+	m.jumpToBlock()
+}
+
+// exitBlockMode leaves executable-block selection and highlights the
+// heading the selected block belongs to.
+func (m *Model) exitBlockMode() {
+	idx := m.headingForBlock()
+	m.blockSel = -1
+	if idx >= 0 {
+		m.outline.sel = idx
+	}
+	m.jumpToSelected()
+}
+
+// headingForBlock returns the outline entry index of the heading containing
+// the selected block (the last heading at or above its badge line), or -1
+// when the block sits in the title's section.
+func (m *Model) headingForBlock() int {
+	if m.out == nil || m.blockSel < 0 || m.blockSel >= len(m.out.Blocks) {
+		return -1
+	}
+	line := m.out.Blocks[m.blockSel].Line
+	idx := -1
+	for i, e := range m.outline.entries {
+		if e.renderLine <= line {
+			idx = i
+		} else {
+			break
+		}
+	}
+	return idx
+}
+
+// jumpToBlock scrolls the content so the selected block's badge sits at the
+// top of the viewport, just below the padding row.
+func (m *Model) jumpToBlock() {
+	if m.out == nil || m.blockSel < 0 || m.blockSel >= len(m.out.Blocks) {
+		return
+	}
+	y := clamp(m.out.Blocks[m.blockSel].Line, 0, m.maxScroll())
 	m.content.SetYOffset(y)
 }
 
@@ -515,17 +629,36 @@ func (m Model) paddedContent() string {
 	return strings.Join(rows, "\n")
 }
 
-// railView builds the one-column rail at the left edge of the text area:
-// blank, except a primary-colored bar beside the selected entry's heading
-// line (the heading itself, not its whole section). The bar tracks the
-// selection whether it came from the cursor or the scroll-spy, and renders
-// nothing when no entry is selected.
+// railView builds the one-column rail at the left edge of the text area.
+// With an executable block selected it carries a primary bar spanning the
+// whole block (its badge through its last line); otherwise a bar beside the
+// selected heading's line. The bar tracks the selection whether it came
+// from the cursor or the scroll-spy, and renders nothing when nothing is
+// selected. Rows span the pane; the content's top padding row shifts bars
+// one row down from the viewport row.
 func (m Model) railView() string {
 	rows := make([]string, m.paneHeight)
 	for i := range rows {
 		rows[i] = " "
 	}
-	if m.out == nil || m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
+	if m.out == nil {
+		return strings.Join(rows, "\n")
+	}
+
+	// Block selection: the bar spans the entire code block.
+	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
+		bm := m.out.Blocks[m.blockSel]
+		start := bm.Line - m.content.YOffset + 1
+		end := bm.End - m.content.YOffset + 1
+		for r := 0; r < m.paneHeight; r++ {
+			if r >= start && r < end {
+				rows[r] = gutterBarStyle.Render("▌")
+			}
+		}
+		return strings.Join(rows, "\n")
+	}
+
+	if m.outline.sel < 0 || m.outline.sel >= len(m.outline.entries) {
 		return strings.Join(rows, "\n")
 	}
 

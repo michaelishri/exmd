@@ -259,6 +259,52 @@ func TestCancelInterruptsBlock(t *testing.T) {
 	}
 }
 
+// TestRunBlockIsolation checks RunBlock: the block at the given index runs
+// in isolation on the launch-time state, the harvest applies to it, and the
+// session continues after that block.
+func TestRunBlockIsolation(t *testing.T) {
+	res, err := doc.Load(filepath.Join("testdata", "flow.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewSession(res.Doc, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	// Block 2 depends on the global block 1 exports — running it in
+	// isolation means that global is absent (the launch-time state).
+	var events []Event
+	emit := func(ev Event) { events = append(events, ev) }
+
+	br := s.RunBlock(context.Background(), 1, emit)
+	if br.Done || br.Block.Index != 2 {
+		t.Fatalf("run block = %+v", br)
+	}
+	if br.Status != 0 {
+		t.Fatalf("status = %d", br.Status)
+	}
+	// The session continues after the block.
+	if s.Remaining() != len(res.Doc.Blocks)-2 {
+		t.Fatalf("remaining = %d", s.Remaining())
+	}
+
+	// The events cover exactly the one block plus the initial snapshot.
+	var starts, ends int
+	for _, ev := range events {
+		switch ev.Kind {
+		case EventBlockStart:
+			starts++
+		case EventBlockEnd:
+			ends++
+		}
+	}
+	if starts != 1 || ends != 1 {
+		t.Fatalf("events: %d starts, %d ends (want 1/1)", starts, ends)
+	}
+}
+
 func TestSessionStepping(t *testing.T) {
 	res, err := doc.Load(filepath.Join("testdata", "flow.md"))
 	if err != nil {

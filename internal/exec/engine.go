@@ -181,14 +181,30 @@ func (s *Session) Close() {
 // Cancelling ctx terminates the current process group — SIGTERM, then
 // SIGKILL after a grace period (§4.7) — and the run stops there.
 func (s *Session) RunNext(ctx context.Context, emit func(Event)) BlockResult {
+	if s.closed || s.next >= len(s.d.Blocks) {
+		return BlockResult{Done: true}
+	}
+	return s.runAt(ctx, s.next, emit)
+}
+
+// RunBlock executes the block at index (0-based) in isolation, regardless
+// of the session's position: the state is the launch-time state (frontmatter
+// defaults plus overrides, §2.2–§4.2) and the harvest applies to it (§4.3).
+// Afterwards the session continues after the block.
+func (s *Session) RunBlock(ctx context.Context, index int, emit func(Event)) BlockResult {
+	if s.closed || index < 0 || index >= len(s.d.Blocks) {
+		return BlockResult{Done: true}
+	}
+	return s.runAt(ctx, index, emit)
+}
+
+// runAt executes the block at index and advances the session past it.
+func (s *Session) runAt(ctx context.Context, index int, emit func(Event)) BlockResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if emit == nil {
 		emit = func(Event) {}
-	}
-	if s.closed || s.next >= len(s.d.Blocks) {
-		return BlockResult{Done: true}
 	}
 	if !s.emittedInitial {
 		s.emittedInitial = true
@@ -196,8 +212,8 @@ func (s *Session) RunNext(ctx context.Context, emit func(Event)) BlockResult {
 	}
 
 	s.blockKilled = false
-	b := s.d.Blocks[s.next]
-	s.next++
+	b := s.d.Blocks[index]
+	s.next = index + 1
 	s.blocksRun++
 
 	emit(Event{Kind: EventBlockStart, Block: b})
