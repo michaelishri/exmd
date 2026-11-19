@@ -111,7 +111,7 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 				// Glamour's code block has a blank row above its first code
 				// line; add a matching shaded blank row below the last one.
 				out.Lines = append(out.Lines,
-					" \x1b[48;2;24;24;30m"+strings.Repeat(" ", width-1)+"\x1b[0m")
+					" "+execPanelEscape+strings.Repeat(" ", width-1)+"\x1b[0m")
 				// And a plain spacing row below the whole box.
 				out.Lines = append(out.Lines, "")
 			}

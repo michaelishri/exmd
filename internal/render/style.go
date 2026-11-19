@@ -125,10 +125,17 @@ func darkStyle() gansi.StyleConfig {
 	return c
 }
 
-// execPanel shades executable blocks with the sidebar's focused surface
-// color (the theme's BackgroundPanel shade), so a code block reads as the
-// same raised surface the focused sidebar does.
-const execPanel = "#18181e"
+// Executable blocks sit one subtle step above the canvas — between the
+// theme's Background (#0e0e11) and BackgroundPanel (#18181e) — so they read
+// as a raised surface without competing with the prose.
+const (
+	execR, execG, execB = 20, 20, 25
+)
+
+var (
+	execPanel       = fmt.Sprintf("#%02x%02x%02x", execR, execG, execB)
+	execPanelEscape = fmt.Sprintf("\x1b[48;2;%d;%d;%dm", execR, execG, execB)
+)
 
 // execDarkStyle is darkStyle with the executable shade on the code block's
 // primitive (the margin cells); the code text rows are painted by
@@ -145,18 +152,17 @@ func execDarkStyle() gansi.StyleConfig {
 // so the background must be re-emitted after every reset; lines are padded
 // to the chunk width so the shaded surface spans the whole content pane.
 func paintExecLines(lines []string, width int) {
-	const bg = "\x1b[48;2;24;24;30m" // #18181e, true color
 	for i, line := range lines {
 		// Leave the first column on the page background: the shaded
 		// surface starts one column in. Consume one of the code block's
 		// indenting spaces so the code text itself does not shift.
 		body := ansi.Cut(line, 1, ansi.StringWidth(line))
 		body = ansi.Truncate(body, width-1, "")
-		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m"+bg)
+		body = strings.ReplaceAll(body, "\x1b[0m", "\x1b[0m"+execPanelEscape)
 		if visible := ansi.StringWidth(body); visible < width-1 {
-			body += bg + strings.Repeat(" ", width-1-visible)
+			body += execPanelEscape + strings.Repeat(" ", width-1-visible)
 		}
-		lines[i] = " " + bg + body + "\x1b[0m"
+		lines[i] = " " + execPanelEscape + body + "\x1b[0m"
 	}
 }
 

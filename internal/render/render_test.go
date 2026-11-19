@@ -106,7 +106,7 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	}
 	bm := out.Blocks[0]
 	badge := out.Lines[bm.Line]
-	if strings.Contains(badge, "48;2;24;24;30") {
+	if strings.Contains(badge, execPanelEscape) {
 		t.Fatalf("badge row should sit on the page background: %q", badge)
 	}
 	// The first non-blank row after the badge is actual code text (the
@@ -121,26 +121,26 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	if code == "" {
 		t.Fatal("no code text row in the block")
 	}
-	if !strings.Contains(code, "48;2;24;24;30") {
+	if !strings.Contains(code, execPanelEscape) {
 		t.Fatalf("code row has no exec background: %q", code)
 	}
-	if !strings.Contains(code, "\x1b[0m\x1b[48;2;24;24;30m") {
+	if !strings.Contains(code, "\x1b[0m"+execPanelEscape) {
 		t.Fatal("background is not re-emitted after chroma's token reset")
 	}
 	// The block ends with a shaded blank row inside its surface, then a
 	// plain spacing row on the page.
 	shadedBlank := out.Lines[bm.End-1]
-	if !strings.Contains(shadedBlank, "48;2;24;24;30") ||
+	if !strings.Contains(shadedBlank, execPanelEscape) ||
 		strings.TrimSpace(ansi.Strip(shadedBlank)) != "" {
 		t.Fatalf("no shaded blank row after the code: %q", shadedBlank)
 	}
 	plain := out.Lines[bm.End]
-	if strings.Contains(plain, "48;2;24;24;30") || strings.TrimSpace(ansi.Strip(plain)) != "" {
+	if strings.Contains(plain, execPanelEscape) || strings.TrimSpace(ansi.Strip(plain)) != "" {
 		t.Fatalf("no plain spacing row below the block: %q", plain)
 	}
 	// The first column stays on the page background: the shaded surface
 	// begins at column 1, so the block reads as indented.
-	if !strings.HasPrefix(code, " \x1b[48;2;24;24;30m") {
+	if !strings.HasPrefix(code, " "+execPanelEscape) {
 		t.Fatalf("the first column should be page-colored: %q", code)
 	}
 	leading := func(s string) int {
@@ -183,8 +183,8 @@ func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
 	if *dark.CodeBlock.StylePrimitive.BackgroundColor == *exec.CodeBlock.StylePrimitive.BackgroundColor {
 		t.Fatal("exec and display fences share a background")
 	}
-	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != "#18181e" {
-		t.Fatalf("exec background = %q, want the sidebar's focused shade (#18181e)", got)
+	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != execPanel {
+		t.Fatalf("exec background = %q, want %q", got, execPanel)
 	}
 	if *dark.Code.StylePrimitive.BackgroundColor != *exec.Code.StylePrimitive.BackgroundColor {
 		t.Fatal("inline code shade should not change between styles")
