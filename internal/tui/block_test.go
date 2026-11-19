@@ -304,6 +304,42 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 	}
 }
 
+// TestInlineStateCarriesBetweenBlocks checks that harvested globals survive
+// between inline runs in one session (SPEC.md §4.3): step 3 exports WORK,
+// step 9 reads it back.
+func TestInlineStateCarriesBetweenBlocks(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	got := enterBlockModeFromFirstHeading(t, m)
+	// Move to step 3's block (index 3): WORK="$(mktemp -d)"; export WORK.
+	for i := 0; i < 3; i++ {
+		mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
+		got = mm.(Model)
+	}
+	if got.blockSel != 3 {
+		t.Fatalf("blockSel = %d, want 3", got.blockSel)
+	}
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = pump(t, mm.(Model), cmd)
+	if !strings.Contains(strings.Join(got.inline[3].lines, "\n"), "workspace:") {
+		t.Fatalf("step 3 output missing: %v", got.inline[3].lines)
+	}
+
+	// Jump to the last block (step 9) and run it: it echoes WORK.
+	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	got = mm.(Model)
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	got = pump(t, mm.(Model), cmd)
+
+	out := strings.Join(got.inline[len(got.doc.Blocks)-1].lines, "\n")
+	if strings.Contains(out, "<unset>") || !strings.Contains(out, "workspace: /") {
+		t.Fatalf("WORK did not carry from step 3 to step 9: %q", out)
+	}
+}
+
 // TestInlineLastBlockOutputIsVisible checks that streaming output from the
 // final block scrolls into view as it arrives.
 func TestInlineLastBlockOutputIsVisible(t *testing.T) {

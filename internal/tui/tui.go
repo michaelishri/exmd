@@ -16,6 +16,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/md-exec/internal/doc"
+	"github.com/michaelishri/md-exec/internal/exec"
 	"github.com/michaelishri/md-exec/internal/render"
 	"github.com/michaelishri/md-exec/internal/theme"
 )
@@ -58,6 +59,10 @@ type Model struct {
 
 	// inline keeps a persistent output box and status per executed block.
 	inline map[int]*inlineState
+
+	// inlineSession carries the harvested global state between inline
+	// runs (SPEC.md §4.3): one session for all blocks in this document.
+	inlineSession *exec.Session
 
 	// paneHeight is the height of the body panes (rail, gutter, sidebar,
 	// content block including its padding rows); the viewport itself shows

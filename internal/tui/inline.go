@@ -51,7 +51,6 @@ type inlineState struct {
 	ch      chan exec.Event
 	ctx     context.Context
 	cancel  context.CancelFunc
-	session *exec.Session
 }
 
 // shutdownInline cancels any in-flight inline runs before quitting: the
@@ -67,10 +66,10 @@ func (m *Model) shutdownInline() {
 		if st.active {
 			time.Sleep(300 * time.Millisecond)
 		}
-		if st.session != nil {
-			st.session.Close()
-			st.session = nil
-		}
+	}
+	if m.inlineSession != nil {
+		m.inlineSession.Close()
+		m.inlineSession = nil
 	}
 }
 
@@ -106,15 +105,21 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	st.lines, st.pending, st.result, st.err = nil, "", nil, nil
 	st.status, st.hasEnd, st.box = 0, false, nil
 
-	s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
-	if err != nil {
-		st.err, st.active, st.done = err, false, true
-		m.rebuildInlineBox(index)
-		m.setContent()
-		return nil
+	// One session for all inline runs carries the harvest delta between
+	// blocks (SPEC.md §4.3): running #3 then #9 sees #3's WORK.
+	if m.inlineSession == nil {
+		s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
+		if err != nil {
+			st.err, st.active, st.done = err, false, true
+			m.rebuildInlineBox(index)
+			m.setContent()
+			return nil
+		}
+		m.inlineSession = s
 	}
+	s := m.inlineSession
 	ctx, cancel := context.WithCancel(context.Background())
-	st.session, st.ctx, st.cancel = s, ctx, cancel
+	st.ctx, st.cancel = ctx, cancel
 	// Show the separator immediately, before the first output event.
 	m.rebuildInlineBox(index)
 	m.setContent()
@@ -204,10 +209,6 @@ drain:
 	st.result = result
 	st.active = false
 	st.done = true
-	if st.session != nil {
-		st.session.Close()
-		st.session = nil
-	}
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
 }
