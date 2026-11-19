@@ -152,6 +152,27 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	}
 }
 
+// TestLastBlockExtentExcludesSpacingRow checks that the final block's rail
+// extent stops before the trailing blank row, like every other block.
+func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	d := loadDemo(t)
+	out, err := Render(d, 80, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := out.Blocks[len(out.Blocks)-1]
+	if last.End >= len(out.Lines) {
+		t.Fatalf("last block extent %d past output (%d lines)", last.End, len(out.Lines))
+	}
+	if row := ansi.Strip(out.Lines[last.End]); strings.TrimSpace(row) != "" {
+		t.Fatalf("extent should stop before the trailing blank row: %q", row)
+	}
+}
+
 // TestHeadingFollowedByBlank checks that every heading in the rendered
 // output is followed by an empty line.
 func TestHeadingFollowedByBlank(t *testing.T) {

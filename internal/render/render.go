@@ -122,7 +122,8 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 
 	// Each block's rendered extent ends where the next chunk starts: the
 	// next heading or block mark, minus the separator blank that precedes
-	// it; the final block runs to the end of the output.
+	// it. The final block also excludes the plain spacing row appended
+	// after its shaded surface, so the extent never covers that row.
 	marks := make([]int, 0, len(out.Headings)+len(out.Blocks))
 	for _, hm := range out.Headings {
 		marks = append(marks, hm.Line)
@@ -133,6 +134,9 @@ func Render(d *doc.Document, width int, color bool) (*Output, error) {
 	sort.Ints(marks)
 	for i := range out.Blocks {
 		end := len(out.Lines)
+		if color {
+			end-- // trailing spacing row of the final exec block
+		}
 		for _, m := range marks {
 			if m > out.Blocks[i].Line {
 				end = m - 1
