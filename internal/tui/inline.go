@@ -246,7 +246,7 @@ func (m *Model) rebuildInlineBox(index int) {
 		return
 	}
 	surface := lipgloss.NewStyle().Background(lipgloss.Color(render.ExecColor()))
-	edge := surface.Foreground(lipgloss.Color("#87878f"))
+	edge := execEdgeStyle
 	body := surface.Foreground(lipgloss.Color("#e4e4e9"))
 	w := m.content.Width
 

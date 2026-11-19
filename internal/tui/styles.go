@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/michaelishri/md-exec/internal/render"
 	"github.com/michaelishri/md-exec/internal/theme"
 )
 
@@ -53,9 +54,12 @@ var (
 	railDoneActiveStyle lipgloss.Style
 	railFailActiveStyle lipgloss.Style
 
-	// sideBorderStyle draws the sidebar's left border line — always
-	// primary; focus is expressed by the strip's background lift.
+	// sideBorderStyle draws the sidebar's left border line in the same
+	// muted chrome color as the separator under an executable code block.
 	sideBorderStyle lipgloss.Style
+
+	// execEdgeStyle is that separator: muted foreground on the exec shade.
+	execEdgeStyle lipgloss.Style
 )
 
 func init() { buildStyles() }
@@ -151,5 +155,9 @@ func buildStyles() {
 	// sideBorderStyle draws the sidebar's focus border: a single primary
 	// line along the strip's left edge.
 	sideBorderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Primary))
+		Foreground(lipgloss.Color(t.TextMuted))
+
+	execEdgeStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.TextMuted)).
+		Background(lipgloss.Color(render.ExecColor()))
 }

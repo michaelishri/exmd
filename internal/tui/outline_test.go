@@ -119,7 +119,7 @@ func TestRailMarksHeadingLine(t *testing.T) {
 }
 
 // TestFocusBorderMoves checks the border behavior across focus: the
-// sidebar's left border line is present in both states (always primary —
+// sidebar's left border line is present in both states (muted, matching the exec separator —
 // focus is expressed by the strip's background lift), and the viewport
 // frame never renders.
 func TestFocusBorderMoves(t *testing.T) {
@@ -156,7 +156,7 @@ func TestFocusBorderMoves(t *testing.T) {
 
 // TestSidebarFocusKeepsLayout checks the focused sidebar: the strip's own
 // rendering is identical with and without focus (nothing shifts), and the
-// only focus artifact is a primary left border line in the gutter beside
+// only focus artifact is a muted left border line in the gutter beside
 // the strip — one per body row, gone again when focus returns.
 func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
@@ -204,7 +204,7 @@ func cellAt(s string, col int) string {
 // TestSidebarFocusShading checks the resting-to-focused lift: while the
 // sidebar rests its rows carry no background at all (they blend into the
 // page like the text area) and its border line is muted chrome; focus
-// lifts the rows onto the panel background and the border to primary.
+// lifts the rows onto the panel background; the border stays muted.
 // TrueColor is forced so the exact colors are assertable.
 func TestSidebarFocusShading(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
@@ -229,13 +229,13 @@ func TestSidebarFocusShading(t *testing.T) {
 		t.Fatalf("focused row should use the panel background: %q", focused[3])
 	}
 
-	// The border line: always primary, in both states.
+	// The sidebar border matches the exec block's separator, in both states.
 	uv, fv := m.View(), gotFocusedView(t)
-	if !strings.Contains(uv, "38;2;143;138;243m│") {
-		t.Fatal("resting border should be primary")
+	if !strings.Contains(uv, sideBorderStyle.Render("│")) {
+		t.Fatal("resting border should be muted, like the output separator")
 	}
-	if !strings.Contains(fv, "38;2;143;138;243m│") {
-		t.Fatal("focused border should be primary")
+	if !strings.Contains(fv, sideBorderStyle.Render("│")) {
+		t.Fatal("focused border should be muted, like the output separator")
 	}
 }
 
