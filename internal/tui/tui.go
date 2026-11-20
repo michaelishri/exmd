@@ -237,6 +237,9 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "c":
 		return m.copyBlockOutput(), true
 
+	case "u":
+		return m.copyBlockURL(), true
+
 	case "s":
 		// §4.7: the engine terminates the current process group.
 		for _, st := range m.inline {
@@ -314,6 +317,48 @@ func (m *Model) copyBlockOutput() tea.Cmd {
 	}
 	m.flash = fmt.Sprintf("copied %d %s from block %d", lines, noun, m.blockSel+1)
 	return nil
+}
+
+// copyBlockURL copies a URL from the focused block's output. Each press
+// advances to the next URL, wrapping around; the cursor belongs to the
+// block's run state so a re-run starts again at the first URL.
+func (m *Model) copyBlockURL() tea.Cmd {
+	if m.blockSel < 0 || !m.validBlock(m.blockSel) {
+		m.flash = "select a block with ` first"
+		return nil
+	}
+	st := m.inline[m.blockSel]
+	if st == nil {
+		m.flash = "no URL in this block's output"
+		return nil
+	}
+	urls := outputURLs(st.copiedText())
+	if len(urls) == 0 {
+		m.flash = "no URL in this block's output"
+		return nil
+	}
+	i := st.urlIndex % len(urls)
+	url := urls[i]
+	if err := copyToClipboard(url); err != nil {
+		m.flash = "copy failed: " + err.Error()
+		return nil
+	}
+	st.urlIndex = i + 1
+	if len(urls) == 1 {
+		m.flash = "copied URL: " + url
+	} else {
+		m.flash = fmt.Sprintf("copied URL %d/%d: %s", i+1, len(urls), url)
+	}
+	return nil
+}
+
+// focusedHasURL reports whether the footer should advertise the u shortcut.
+func (m Model) focusedHasURL() bool {
+	if m.blockSel < 0 || !m.validBlock(m.blockSel) {
+		return false
+	}
+	st := m.inline[m.blockSel]
+	return st != nil && len(outputURLs(st.copiedText())) > 0
 }
 
 // handleOutlineKey moves the sidebar selection. The outline consumes every
@@ -658,6 +703,9 @@ func (m Model) keyHints() string {
 		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "q quit"}
 	default:
 		hints = []string{"j/k scroll", "drag copy", "tab outline", "` blocks", "r run", "q quit"}
+	}
+	if m.focusedHasURL() {
+		hints = append(hints, "u url")
 	}
 	return infoStyle.Render(strings.Join(hints, " · "))
 }
