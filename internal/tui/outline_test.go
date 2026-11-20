@@ -281,10 +281,10 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 	}
 }
 
-// TestOutlineTitleIsFirstH1 checks that the sidebar title is the document's
-// first level-1 heading even when it is not the first body line. The title
-// is its own selectable row (sel == -1), separate from the heading entries.
-func TestOutlineTitleIsFirstH1(t *testing.T) {
+// TestOutlineTitlePrefersFrontmatter checks that a frontmatter title wins
+// over the h1 in the sidebar, while the h1 stays in the document body and
+// remains excluded from the heading entries.
+func TestOutlineTitlePrefersFrontmatter(t *testing.T) {
 	src := `---
 type: runbook
 title: Fixture
@@ -304,17 +304,45 @@ More text after the h1.
 		t.Fatal(err)
 	}
 	m := newViewerFromDoc(t, 120, 40, path, nil)
-	if m.outline.title != "The Real Title" {
-		t.Fatalf("sidebar title = %q, want the first h1 %q", m.outline.title, "The Real Title")
+	if m.outline.title != "Fixture" {
+		t.Fatalf("sidebar title = %q, want the frontmatter title %q", m.outline.title, "Fixture")
 	}
-	// The h1 is the title row (selectable via sel == -1), not an entry:
+	// The h1 is still the selectable title row (sel == -1), not an entry:
 	// only the h2 remains in the entries list.
 	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "1. An h2 comes first" {
 		t.Fatalf("entries = %+v, want only the numbered h2", m.outline.entries)
 	}
+	if !strings.Contains(strings.Join(m.contentLines(), "\n"), "The Real Title") {
+		t.Fatal("the h1 disappeared from the document body")
+	}
 	v := m.outline.view(m.paneHeight, false)
-	if !strings.Contains(strings.Split(v, "\n")[1], "The Real Title") {
+	if !strings.Contains(strings.Split(v, "\n")[1], "Fixture") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
+	}
+}
+
+// TestOutlineTitleFallsBackToH1 checks documents with an h1 but no
+// frontmatter title: the h1 is used as before.
+func TestOutlineTitleFallsBackToH1(t *testing.T) {
+	src := `---
+type: runbook
+spec: 1
+---
+
+# Find and Replace
+
+## Steps
+`
+	path := filepath.Join(t.TempDir(), "no-title.md")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newViewerFromDoc(t, 120, 40, path, nil)
+	if m.outline.title != "Find and Replace" {
+		t.Fatalf("sidebar title = %q, want the h1 %q", m.outline.title, "Find and Replace")
+	}
+	if len(m.outline.entries) != 1 || m.outline.entries[0].label != "1. Steps" {
+		t.Fatalf("entries = %+v, want only the numbered h2", m.outline.entries)
 	}
 }
 
