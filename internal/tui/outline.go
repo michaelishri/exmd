@@ -37,14 +37,22 @@ func newOutline() outlineModel {
 	return outlineModel{tab: tabHeadings}
 }
 
-// firstHeading returns the text and index of the first level-1 heading.
-// It makes no position assumption. Documents without an h1 fall back to the
-// document title and return -1.
-func firstHeading(d *doc.Document) (string, int) {
+// sidebarTitle returns the title row's text and the index of the first h1,
+// which stays out of the outline entries. A frontmatter title wins; the h1
+// is the fallback, then the document title (file name) when there is no h1.
+func sidebarTitle(d *doc.Document) (string, int) {
+	firstH1 := -1
 	for i, h := range d.Headings {
 		if h.Level == 1 {
-			return h.Text, i
+			firstH1 = i
+			break
 		}
+	}
+	if d.Title != "" {
+		return d.Title, firstH1
+	}
+	if firstH1 >= 0 {
+		return d.Headings[firstH1].Text, firstH1
 	}
 	return d.HeadingText(), -1
 }
@@ -52,7 +60,7 @@ func firstHeading(d *doc.Document) (string, int) {
 // rebuild recomputes entries from the current render and tab.
 func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	o.width = width
-	title, skip := firstHeading(d)
+	title, skip := sidebarTitle(d)
 	o.title = title
 	o.entries = o.entries[:0]
 	switch o.tab {
@@ -138,7 +146,7 @@ func (o *outlineModel) last() bool {
 const panePad = 1
 
 // view renders the sidebar as a full-height shaded column: a blank pad
-// row, the document's first h1 as the title row (two columns in), a blank
+// row, the document's title as the title row (two columns in), a blank
 // pad row, then the entries, with blank rows padding the bottom. The
 // layout is identical whether or not the sidebar holds focus — the focus
 // border is drawn beside the strip, in the gutter. While the sidebar does
@@ -170,7 +178,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 		}
 	}
 
-	// Title row: the document's first h1, two columns in. It doubles as
+	// Title row: the document's title, two columns in. It doubles as
 	// the topmost selectable row (sel == -1): when the cursor is on it,
 	// it carries the selection background like any other row, and the
 	// content scrolls to the very top.
