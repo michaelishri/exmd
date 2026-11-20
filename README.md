@@ -76,7 +76,9 @@ its output streaming into the document beneath it. Arrows walk between blocks,
 OSC 52), **`s`** stops a running block, and each executed block keeps its output
 and status indicator as you move through the document. Drag with the mouse in
 the text pane to select any on-screen text; releasing copies the selection to
-the clipboard as plain text.
+the clipboard as plain text. When the focused block's output contains `http://`
+or `https://` links, **`u`** copies a URL — pressing it again cycles through
+the URLs in that output.
 
 Headings that don't already start with a number are numbered automatically in
 both the viewer and `exmd print` — `1.`, `1.1.`, and so on. A document whose

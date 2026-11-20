@@ -47,6 +47,7 @@ type inlineState struct {
 	rendered  []string // rendered output rows, one per line in lines
 	boxWidth  int      // width used for rendered
 	boxIndent int      // indent used for rendered
+	urlIndex  int      // next URL to copy from this block's output
 	ch        chan exec.Event
 	finished  chan struct{} // closed when the engine run returns
 	cancel    context.CancelFunc
@@ -130,7 +131,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	st := m.stateFor(index)
 	st.active, st.done = true, false
 	st.lines, st.pending, st.result, st.err = nil, "", nil, nil
-	st.status, st.box = 0, nil
+	st.status, st.box, st.urlIndex = 0, nil, 0
 
 	// One session for all inline runs carries the harvest delta between
 	// blocks (SPEC.md §4.3): running #3 then #9 sees #3's WORK.
