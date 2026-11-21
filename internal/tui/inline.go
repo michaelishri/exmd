@@ -11,8 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/exec"
-	"github.com/michaelishri/exmd/internal/render"
-	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // eventChanBuffer is sized so that a synchronous test driver cannot
@@ -287,8 +285,8 @@ func (m *Model) rebuildInlineBox(index int) {
 		st.boxWidth, st.boxIndent = w, indent
 	}
 
-	surface := lipgloss.NewStyle().Background(lipgloss.Color(render.ExecColor()))
-	body := surface.Foreground(lipgloss.Color(theme.Palette.Text))
+	surface := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.ExecPanel))
+	body := surface.Foreground(lipgloss.Color(m.theme.Text))
 	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
 	room := max(0, w-1-len(prefix))
 	for i := len(st.rendered); i < len(st.lines); i++ {

@@ -27,7 +27,7 @@ func cmdCheck(args []string) int {
 		return 2
 	}
 	if warns == 0 {
-		fmt.Println(styleDim.Render(fmt.Sprintf("no issues · %d executable block(s) · %d global(s)",
+		printThemeLine(styleDim.Render(fmt.Sprintf("no issues · %d executable block(s) · %d global(s)",
 			len(res.Doc.Blocks), len(res.Doc.Globals))))
 	}
 	return 0

@@ -153,6 +153,10 @@ func TestRunExitCodes(t *testing.T) {
 		{"globals with override", []string{"globals", demo, "--set", "JOB_NAME=prod"}, 0},
 		{"globals bad override", []string{"globals", demo, "--set", "BAD"}, 2},
 		{"print short width", []string{"print", demo, "-width=40"}, 0},
+		{"print dark", []string{"print", demo, "--theme=dark"}, 0},
+		{"print notty", []string{"print", demo, "--theme=notty"}, 0},
+		{"print bad theme", []string{"print", demo, "--theme=bogus"}, 2},
+		{"tui bad theme", []string{demo, "--theme=bogus"}, 2},
 		{"print help", []string{"print", demo, "-h"}, 0},
 		{"unknown command", []string{"frobnicate"}, 2},
 	}

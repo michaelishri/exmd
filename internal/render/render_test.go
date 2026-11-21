@@ -9,6 +9,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 func loadDemo(t *testing.T) *doc.Document {
@@ -25,7 +26,7 @@ func loadDemo(t *testing.T) *doc.Document {
 
 func TestRenderStructure(t *testing.T) {
 	d := loadDemo(t)
-	out := Render(d, 80, false)
+	out := Render(d, 80, theme.Notty)
 	if len(out.Lines) == 0 {
 		t.Fatal("no lines rendered")
 	}
@@ -61,7 +62,7 @@ func TestRenderStructure(t *testing.T) {
 func TestRenderWidth(t *testing.T) {
 	d := loadDemo(t)
 	for _, width := range []int{40, 80, 120} {
-		out := Render(d, width, false)
+		out := Render(d, width, theme.Notty)
 		for i, l := range out.Lines {
 			if w := ansi.StringWidth(l); w > width {
 				t.Fatalf("line %d width %d exceeds %d: %q", i, w, width, l)
@@ -72,8 +73,8 @@ func TestRenderWidth(t *testing.T) {
 
 func TestRenderDeterministic(t *testing.T) {
 	d := loadDemo(t)
-	a := Render(d, 80, false)
-	b := Render(d, 80, false)
+	a := Render(d, 80, theme.Notty)
+	b := Render(d, 80, theme.Notty)
 	if strings.Join(a.Lines, "\n") != strings.Join(b.Lines, "\n") {
 		t.Fatal("render is not deterministic")
 	}
@@ -87,8 +88,10 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prevProfile)
 
+	execPanelEscape := backgroundEscape(theme.Dark.ExecPanel)
+	canvasEscape := backgroundEscape(theme.Dark.Background)
 	d := loadDemo(t)
-	out := Render(d, 80, true)
+	out := Render(d, 80, theme.Dark)
 	bm := out.Blocks[0]
 	badge := out.Lines[bm.Line]
 	if strings.Contains(badge, execPanelEscape) {
@@ -125,7 +128,7 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 	}
 	// The first column stays on the page background: the shaded surface
 	// begins at column 1, so the block reads as indented.
-	if !strings.HasPrefix(code, " "+execPanelEscape) {
+	if !strings.HasPrefix(code, canvasEscape+" "+execPanelEscape) {
 		t.Fatalf("the first column should be page-colored: %q", code)
 	}
 	leading := func(s string) int {
@@ -145,7 +148,7 @@ func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	d := loadDemo(t)
-	out := Render(d, 80, true)
+	out := Render(d, 80, theme.Dark)
 	last := out.Blocks[len(out.Blocks)-1]
 	if last.End >= len(out.Lines) {
 		t.Fatalf("last block extent %d past output (%d lines)", last.End, len(out.Lines))
@@ -159,7 +162,7 @@ func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
 // output is followed by an empty line.
 func TestHeadingFollowedByBlank(t *testing.T) {
 	d := loadDemo(t)
-	out := Render(d, 80, true)
+	out := Render(d, 80, theme.Dark)
 	for _, hm := range out.Headings {
 		if hm.Line+1 >= len(out.Lines) {
 			continue // the document ends with the heading
@@ -174,13 +177,13 @@ func TestHeadingFollowedByBlank(t *testing.T) {
 func TestExecBlocksShadedApartFromDisplayFences(t *testing.T) {
 	// Executable blocks carry a soft raised shade; display-only fences
 	// keep the neutral panel shade; inline code in prose is unchanged.
-	dark, exec := darkStyle(), execDarkStyle()
+	dark, exec := styleFor(theme.Dark), execStyleFor(theme.Dark)
 	if dark.CodeBlock.StylePrimitive.BackgroundColor == nil ||
 		exec.CodeBlock.StylePrimitive.BackgroundColor == nil {
 		t.Fatal("code-block backgrounds unset")
 	}
-	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != execPanel {
-		t.Fatalf("exec background = %q, want %q", got, execPanel)
+	if got := *exec.CodeBlock.StylePrimitive.BackgroundColor; got != string(theme.Dark.ExecPanel) {
+		t.Fatalf("exec background = %q, want %q", got, theme.Dark.ExecPanel)
 	}
 	if *dark.Code.StylePrimitive.BackgroundColor != *exec.Code.StylePrimitive.BackgroundColor {
 		t.Fatal("inline code shade should not change between styles")

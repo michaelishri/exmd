@@ -105,6 +105,6 @@ func cmdGlobals(args []string) int {
 	}
 	printTable([]string{"NAME", "SOURCE", "VALUE"}, rows)
 
-	fmt.Println(styleDim.Render(fmt.Sprintf("%d declared global(s); absent ones start unset until overridden or exported by a block (SPEC.md §2.2)", len(names))))
+	printThemeLine(styleDim.Render(fmt.Sprintf("%d declared global(s); absent ones start unset until overridden or exported by a block (SPEC.md §2.2)", len(names))))
 	return 0
 }
