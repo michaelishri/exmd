@@ -1,6 +1,6 @@
 // Package render turns a parsed document into styled terminal lines.
 //
-// It is a pure function of (document, width, color): the TUI re-renders on
+// It is a pure function of (document, width, theme): the TUI re-renders on
 // resize and the `exmd print` verb shares the same pipeline. Content is
 // rendered with glamour, chunk by chunk, so the output carries the rendered
 // line index of every heading (for outline navigation and scroll-spy) and
@@ -17,6 +17,7 @@ import (
 	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // HeadingMark is the rendered line at which a heading starts. Index i
@@ -49,11 +50,13 @@ type boundary struct {
 	block   int // index into d.Blocks, -1 otherwise
 }
 
-// Render renders d at the given width. width <= 0 falls back to DefaultWidth.
-func Render(d *doc.Document, width int, color bool) *Output {
+// Render renders d at the given width with the active theme. width <= 0
+// falls back to DefaultWidth. The notty theme yields unstyled plain text.
+func Render(d *doc.Document, width int, th theme.Theme) *Output {
 	if width <= 0 {
 		width = DefaultWidth
 	}
+	color := th.Name != theme.Notty.Name
 	out := &Output{Width: width}
 	numbers := headingNumbers(d)
 
@@ -62,11 +65,13 @@ func Render(d *doc.Document, width int, color bool) *Output {
 
 	var style, execStyle ansi.StyleConfig
 	if color {
-		style = darkStyle()
-		execStyle = execDarkStyle()
+		style = styleFor(th)
+		execStyle = execStyleFor(th)
 	} else {
 		style = styles.ASCIIStyleConfig
 	}
+	canvas := backgroundEscape(th.Background)
+	exec := backgroundEscape(th.ExecPanel)
 
 	// Build the renderers once: glamour's setup is expensive and the same
 	// two styles are used for every chunk in the document.
@@ -104,7 +109,7 @@ func Render(d *doc.Document, width int, color bool) *Output {
 				Line:   len(out.Lines),
 				Number: number,
 			})
-			out.appendGlamour(prefixHeadingNumber(chunk, number), renderer)
+			out.appendGlamour(prefixHeadingNumber(chunk, number), renderer, canvas)
 		case b.block >= 0:
 			blk := d.Blocks[b.block]
 			out.Blocks = append(out.Blocks, BlockMark{
@@ -112,23 +117,23 @@ func Render(d *doc.Document, width int, color bool) *Output {
 				Label:    blockLabel(blk),
 				BlockRef: blk,
 			})
-			out.appendBadge(blk, color)
+			out.appendBadge(blk, th)
 			// Strip the :exec suffix so chroma picks the right lexer; this
 			// only affects rendering, never execution (SPEC.md §9).
 			chunk = stripExecSuffix(chunk)
 			start := len(out.Lines)
-			out.appendGlamour(chunk, execRenderer)
+			out.appendGlamour(chunk, execRenderer, "")
 			if color {
-				paintExecLines(out.Lines[start:], width)
+				paintExecLines(out.Lines[start:], width, canvas, exec)
 				// Glamour's code block has a blank row above its first code
 				// line; add a matching shaded blank row below the last one.
 				out.Lines = append(out.Lines,
-					" "+execPanelEscape+strings.Repeat(" ", width-1)+"\x1b[0m")
+					canvas+" "+exec+strings.Repeat(" ", width-1)+"\x1b[0m")
 				// And a plain spacing row below the whole box.
 				out.Lines = append(out.Lines, "")
 			}
 		default:
-			out.appendGlamour(chunk, renderer)
+			out.appendGlamour(chunk, renderer, canvas)
 		}
 	}
 

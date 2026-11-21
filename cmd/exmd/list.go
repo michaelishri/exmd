@@ -22,7 +22,7 @@ func cmdList(args []string) int {
 
 	if len(res.Doc.Blocks) == 0 {
 		if !res.HasErrors() {
-			fmt.Println(styleDim.Render("no executable blocks"))
+			printThemeLine(styleDim.Render("no executable blocks"))
 		}
 		if res.HasErrors() {
 			return 2

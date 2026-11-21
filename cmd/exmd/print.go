@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"golang.org/x/term"
 
@@ -87,12 +88,14 @@ func cmdPrint(args []string) int {
 			width = render.DefaultWidth
 		}
 	}
-	// Forcing the notty theme suppresses color even on a capable terminal.
-	color := tty && colorSupported() && th.Name != theme.Notty.Name
-
-	out := render.Render(res.Doc, width, color)
-	for _, l := range out.Lines {
-		fmt.Println(l)
+	// A non-TTY stream and --theme notty both suppress color. Otherwise
+	// the resolved theme owns every color in the output, including the
+	// canvas behind the lines.
+	if !tty || !colorSupported() {
+		th = theme.Notty
 	}
+
+	out := render.Render(res.Doc, width, th)
+	fmt.Println(render.PaintCanvas(strings.Join(out.Lines, "\n"), width, th))
 	return 0
 }

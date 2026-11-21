@@ -40,6 +40,39 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestDarkTokensComplete(t *testing.T) {
+	// Every role must carry a color: an empty token would fall back to the
+	// terminal's own palette and reintroduce the inconsistency this theme
+	// is meant to remove.
+	for name, c := range map[string]Color{
+		"Background":        Dark.Background,
+		"BackgroundPanel":   Dark.BackgroundPanel,
+		"BackgroundElement": Dark.BackgroundElement,
+		"Border":            Dark.Border,
+		"Separator":         Dark.Separator,
+		"Text":              Dark.Text,
+		"TextMuted":         Dark.TextMuted,
+		"Bright":            Dark.Bright,
+		"Soft":              Dark.Soft,
+		"Accent":            Dark.Accent,
+		"Rule":              Dark.Rule,
+		"CodePanel":         Dark.CodePanel,
+		"ExecPanel":         Dark.ExecPanel,
+		"Primary":           Dark.Primary,
+		"Success":           Dark.Success,
+		"Error":             Dark.Error,
+		"Warning":           Dark.Warning,
+		"Running":           Dark.Running,
+		"SuccessBright":     Dark.SuccessBright,
+		"ErrorBright":       Dark.ErrorBright,
+		"RunningBright":     Dark.RunningBright,
+	} {
+		if c == "" {
+			t.Errorf("Dark.%s is empty", name)
+		}
+	}
+}
+
 func TestNottyTokensEmpty(t *testing.T) {
 	// The notty fallback must leave every token empty so styles render as
 	// plain text.
@@ -52,11 +85,20 @@ func TestNottyTokensEmpty(t *testing.T) {
 			"Separator":         th.Separator,
 			"Text":              th.Text,
 			"TextMuted":         th.TextMuted,
+			"Bright":            th.Bright,
+			"Soft":              th.Soft,
+			"Accent":            th.Accent,
+			"Rule":              th.Rule,
+			"CodePanel":         th.CodePanel,
+			"ExecPanel":         th.ExecPanel,
 			"Primary":           th.Primary,
 			"Success":           th.Success,
 			"Error":             th.Error,
 			"Warning":           th.Warning,
 			"Running":           th.Running,
+			"SuccessBright":     th.SuccessBright,
+			"ErrorBright":       th.ErrorBright,
+			"RunningBright":     th.RunningBright,
 		} {
 			if c != "" {
 				t.Errorf("Notty.%s = %q, want empty", name, c)

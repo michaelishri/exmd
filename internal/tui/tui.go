@@ -477,7 +477,11 @@ func (m *Model) relayout() {
 	// height minus those two rows.
 	m.content.Height = max(1, bodyH-paneInsets)
 
-	m.out = render.Render(m.doc, contentW, m.colorEnabled())
+	th := m.theme
+	if !m.colorEnabled() {
+		th = theme.Notty
+	}
+	m.out = render.Render(m.doc, contentW, th)
 
 	if m.out != nil {
 		for index := range m.inline {
@@ -660,13 +664,15 @@ func lastAtOrBefore(values []int, off int) int {
 	return idx
 }
 
-// View renders the full screen: blank row, body, hairline, footer.
+// View renders the full screen: blank row, body, hairline, footer. The
+// finished frame is painted with the theme's canvas so no cell falls back
+// to the terminal's own background.
 func (m Model) View() string {
 	if !m.laidOut {
-		return "Loading…"
+		return m.paintCanvas("Loading…")
 	}
 	if m.width < minViewWidth || m.height < minViewHeight {
-		return m.content.View()
+		return m.paintCanvas(m.content.View())
 	}
 	var sb strings.Builder
 	// The viewer floats the panes with a blank row above, then a hairline
@@ -678,7 +684,16 @@ func (m Model) View() string {
 	sb.WriteString(m.sepView())
 	sb.WriteByte('\n')
 	sb.WriteString(m.footerView())
-	return sb.String()
+	return m.paintCanvas(sb.String())
+}
+
+// paintCanvas applies the active theme's background to a finished frame.
+// In notty mode the frame is left untouched, so it stays plain text.
+func (m Model) paintCanvas(view string) string {
+	if !m.colorEnabled() {
+		return view
+	}
+	return render.PaintCanvas(view, m.width, m.theme)
 }
 
 // footerView is the bottom line: shortcuts for the current context on the

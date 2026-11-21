@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/render"
 	"github.com/michaelishri/exmd/internal/theme"
 	"github.com/muesli/termenv"
 )
@@ -43,11 +44,27 @@ Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2
 var errHelp = errors.New("help")
 
 // OpenCode-adjacent minimal styling: color only where it carries meaning.
+// The colors come from the theme, never from the terminal's ANSI palette.
 var (
-	styleErr  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	styleDim  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	styleErr  = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().Error))
+	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().Warning))
+	styleDim  = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().TextMuted))
 )
+
+// diagnosticTheme supplies the diagnostics palette. On a terminal without
+// color support every token is empty, so styles render as plain text.
+func diagnosticTheme() theme.Theme {
+	if !colorSupported() {
+		return theme.Notty
+	}
+	return theme.Dark
+}
+
+// printThemeLine writes a line with the same canvas rule as the TUI and
+// print, so headless output never falls back to the terminal's palette.
+func printThemeLine(s string) {
+	fmt.Println(render.PaintCanvas(s, lipgloss.Width(s), diagnosticTheme()))
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -166,9 +183,9 @@ func printDiagnostics(res *doc.Result) {
 		}
 		msg := d.Detail()
 		if d.Line > 0 {
-			fmt.Printf("%s:%d: %s: %s\n", path, d.Line, sev, msg)
+			printThemeLine(fmt.Sprintf("%s:%d: %s: %s", path, d.Line, sev, msg))
 		} else {
-			fmt.Printf("%s: %s: %s\n", path, sev, msg)
+			printThemeLine(fmt.Sprintf("%s: %s: %s", path, sev, msg))
 		}
 	}
 }
@@ -187,5 +204,5 @@ func printSummary(errs, warns int) {
 	if errs == 0 && warns == 0 {
 		return
 	}
-	fmt.Println(styleDim.Render(fmt.Sprintf("%d error(s), %d warning(s)", errs, warns)))
+	printThemeLine(styleDim.Render(fmt.Sprintf("%d error(s), %d warning(s)", errs, warns)))
 }

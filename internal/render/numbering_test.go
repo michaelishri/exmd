@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 func loadUnnumbered(t *testing.T) *doc.Document {
@@ -49,7 +50,7 @@ func TestHeadingNumbers(t *testing.T) {
 
 func TestRenderedHeadingNumbers(t *testing.T) {
 	d := loadUnnumbered(t)
-	out := Render(d, 80, false)
+	out := Render(d, 80, theme.Notty)
 	joined := strings.Join(out.Lines, "\n")
 	for _, heading := range []string{
 		"1. Preflight", "1.1. Checks", "1.1.1. Deep",
@@ -70,7 +71,7 @@ func TestRenderedHeadingNumbers(t *testing.T) {
 func TestDocumentSourceIsUnchanged(t *testing.T) {
 	d := loadUnnumbered(t)
 	before := string(d.Source)
-	_ = Render(d, 80, false)
+	_ = Render(d, 80, theme.Notty)
 	if string(d.Source) != before {
 		t.Fatal("rendering modified the document source")
 	}
@@ -85,7 +86,7 @@ func TestDemoKeepsItsOwnNumbers(t *testing.T) {
 			t.Fatalf("demo heading %d got generated number %q", i, n)
 		}
 	}
-	out := Render(d, 80, false)
+	out := Render(d, 80, theme.Notty)
 	joined := strings.Join(out.Lines, "\n")
 	if !strings.Contains(joined, "1. Preflight and point-of-use guards") {
 		t.Fatal("demo's own heading number disappeared")
@@ -162,7 +163,7 @@ func TestPrefixHeadingNumber(t *testing.T) {
 
 func TestRenderWidthWithNumbers(t *testing.T) {
 	d := loadUnnumbered(t)
-	out := Render(d, 40, false)
+	out := Render(d, 40, theme.Notty)
 	for i, l := range out.Lines {
 		if w := ansi.StringWidth(l); w > 40 {
 			t.Fatalf("line %d width %d exceeds 40: %q", i, w, l)

@@ -3,7 +3,6 @@ package tui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/michaelishri/exmd/internal/render"
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
@@ -125,11 +124,11 @@ func buildStyles() {
 
 	// Same hues, one shade brighter and bold, for the selected block.
 	railRunActiveStyle = railRunStyle.
-		Foreground(lipgloss.Color("#ffc9a3")).Bold(true)
+		Foreground(lipgloss.Color(t.RunningBright)).Bold(true)
 	railDoneActiveStyle = railDoneStyle.
-		Foreground(lipgloss.Color("#a5e8a8")).Bold(true)
+		Foreground(lipgloss.Color(t.SuccessBright)).Bold(true)
 	railFailActiveStyle = railFailStyle.
-		Foreground(lipgloss.Color("#ff9b9b")).Bold(true)
+		Foreground(lipgloss.Color(t.ErrorBright)).Bold(true)
 
 	// The sidebar border and the exec block's output separator share the
 	// same bright chrome tone.
@@ -138,5 +137,5 @@ func buildStyles() {
 
 	execEdgeStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Separator)).
-		Background(lipgloss.Color(render.ExecColor()))
+		Background(lipgloss.Color(t.ExecPanel))
 }

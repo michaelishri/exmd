@@ -69,6 +69,12 @@ they never execute blocks:
 - `exmd globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
   declared globals, defaults, overrides, and what starts present vs absent
 
+Themes are owned by the tool, not mixed with the terminal palette. `auto`
+(the default) and `dark` use exmd's dark palette and paint the whole canvas,
+so the reader looks the same in a light terminal and a dark one.
+`--theme notty` emits no color at all, leaving the terminal's own palette in
+charge.
+
 In the TUI, highlight a heading in the outline and press **`\``** to select the
 code blocks in its section; **`r`** runs the highlighted block *in place*, with
 its output streaming into the document beneath it. Arrows walk between blocks,
