@@ -171,10 +171,10 @@ func Load(docPath string) (*Snapshot, error) {
 func decode(data []byte, path string) (*Snapshot, error) {
 	var s Snapshot
 	if err := yaml.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("parse %s: %w; clear the snapshot with `exmd resume DOC --clear` and start a new session", path, err)
+		return nil, fmt.Errorf("parse %s: %w; clear the snapshot with `exmd DOC --resume --clear` and start a new session", path, err)
 	}
 	if s.Version != FormatVersion {
-		return nil, fmt.Errorf("parse %s: unsupported snapshot version %d (expected %d); clear the snapshot with `exmd resume DOC --clear` and start a new session", path, s.Version, FormatVersion)
+		return nil, fmt.Errorf("parse %s: unsupported snapshot version %d (expected %d); clear the snapshot with `exmd DOC --resume --clear` and start a new session", path, s.Version, FormatVersion)
 	}
 	return &s, nil
 }
@@ -267,7 +267,7 @@ func List() ([]*Snapshot, error) {
 // Validate checks that a snapshot can be safely replayed against the current
 // document. Errors include the action the user can take to recover.
 func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error {
-	hint := "clear it with `exmd resume DOC --clear` and start a new session"
+	hint := "clear it with `exmd DOC --resume --clear` and start a new session"
 	if s.Version != FormatVersion {
 		return fmt.Errorf("unsupported snapshot version %d (expected %d); %s", s.Version, FormatVersion, hint)
 	}
@@ -286,7 +286,7 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 		return fmt.Errorf("the document or one of its scripts changed since the snapshot was saved; %s", hint)
 	}
 	if !sameMap(s.Overrides, overrides) {
-		return fmt.Errorf("--set overrides differ from the saved session; replay them or clear the snapshot with `exmd resume DOC --clear`")
+		return fmt.Errorf("--set overrides differ from the saved session; replay them or clear the snapshot with `exmd DOC --resume --clear`")
 	}
 	if err := exec.ValidateState(d, s.State()); err != nil {
 		return fmt.Errorf("saved state is invalid: %w; %s", err, hint)

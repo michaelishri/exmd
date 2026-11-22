@@ -92,12 +92,12 @@ The TUI saves one session per document as you work: when a block starts, while
 its output streams, when it finishes, and when you quit. Resume it with:
 
 ```sh
-exmd resume DOC
+exmd DOC --resume
 ```
 
-`exmd resume --list` shows saved sessions; `exmd resume DOC --clear` discards
-one. A resumed session restores the harvested globals, each block's output and
-status, the next block, and the highlighted block. It does **not** restore a
+`exmd --resume --list` shows saved sessions; `exmd DOC --resume --clear`
+discards one. A resumed session restores the harvested globals, each block's
+output and status, the next block, and the highlighted block. It does **not** restore a
 live process, the host environment, or the scroll position: a run that was
 still active comes back stopped, with its partial output kept and ready to
 re-run.

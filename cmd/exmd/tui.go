@@ -79,7 +79,7 @@ func launchTUI(res *doc.Result, overrides map[string]string, themeName string, s
 		return 2
 	}
 	if snap == nil {
-		fmt.Printf("Session saved — resume with: exmd resume %s\n", res.Doc.Path)
+		fmt.Printf("Session saved — resume with: exmd %s --resume\n", res.Doc.Path)
 	}
 	return 0
 }

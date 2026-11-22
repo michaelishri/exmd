@@ -4,19 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/michaelishri/exmd/internal/session"
 )
 
-const resumeUsage = `exmd resume DOC [--set KEY=VALUE]... [--theme auto|dark|notty]
-                     reopen the last saved session for a runbook
-exmd resume --list   list saved sessions
-exmd resume DOC --clear
+const resumeUsage = `exmd DOC --resume [--set KEY=VALUE]... [--theme auto|dark|notty]
+                     reopen the last saved session for DOC (--resume may precede DOC)
+exmd --resume --list list saved sessions
+exmd DOC --resume --clear
                      discard a saved session
 
 A resume replays saved globals and block outputs into a fresh run. --set
 overrides must match the saved ones. If the document or a referenced script
-changed, clear the snapshot with --clear and start a new session.`
+changed, clear it with \"exmd DOC --resume --clear\" and start a new session.`
 
 // extractBool removes a stand-alone boolean flag from args and reports
 // whether it appeared. Flags may appear in any position.
@@ -31,10 +32,34 @@ func extractBool(args []string, flag string) (rest []string, found bool) {
 	return rest, found
 }
 
+// extractResume removes --resume (or -resume) and reports its optional value,
+// so flags may appear before or after the document.
+func extractResume(args []string) (rest []string, value string, found bool) {
+	for _, a := range args {
+		switch {
+		case a == "--resume" || a == "-resume":
+			found = true
+		case strings.HasPrefix(a, "--resume="):
+			found = true
+			value = strings.TrimPrefix(a, "--resume=")
+		case strings.HasPrefix(a, "-resume="):
+			found = true
+			value = strings.TrimPrefix(a, "-resume=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if value != "" {
+		rest = append(rest, value)
+	}
+	return rest, value, found
+}
+
 // cmdResume reopens a saved viewer session, lists snapshots, or clears one.
 // A resume never reattaches to a process: it replays legal §4 state into a
 // fresh run (SPEC.md §9).
 func cmdResume(args []string) int {
+	args, _, _ = extractResume(args)
 	args, help := extractHelp(args)
 	if help {
 		fmt.Println(resumeUsage)
