@@ -86,6 +86,31 @@ the clipboard as plain text. When the focused block's output contains `http://`
 or `https://` links, **`u`** copies a URL — pressing it again cycles through
 the URLs in that output.
 
+### Sessions
+
+The TUI saves one session per document as you work: when a block starts, while
+its output streams, when it finishes, and when you quit. Resume it with:
+
+```sh
+exmd resume DOC
+```
+
+`exmd resume --list` shows saved sessions; `exmd resume DOC --clear` discards
+one. A resumed session restores the harvested globals, each block's output and
+status, the next block, and the highlighted block. It does **not** restore a
+live process, the host environment, or the scroll position: a run that was
+still active comes back stopped, with its partial output kept and ready to
+re-run.
+
+Snapshots live in `$XDG_CONFIG_HOME/exmd/sessions/` (or
+`~/.config/exmd/sessions/`). They are refused when the document or any script
+it references has changed since the save, when `--set` overrides differ, or
+when the snapshot is malformed — in each case the error says how to recover.
+
+This is tool-level UX, not a new execution semantic: saved globals are replayed
+into a fresh run through the §4 state rules, so no shell, working directory,
+function, or import survives a resume (SPEC.md §4.5, §9).
+
 Headings that don't already start with a number are numbered automatically in
 both the viewer and `exmd print` — `1.`, `1.1.`, and so on. A document whose
 headings already carry numbers (like `demo.md`) is displayed exactly as
