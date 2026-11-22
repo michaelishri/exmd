@@ -99,43 +99,7 @@ type Session struct {
 // NewSession resolves launch-time overrides (§2.2), stages the harnesses,
 // and prepares to execute blocks in order.
 func NewSession(d *doc.Document, opts Options) (*Session, error) {
-	overrides := opts.Overrides
-	if overrides == nil {
-		overrides = map[string]string{}
-	}
-	present, diags := d.ResolveGlobals(overrides)
-	for _, dg := range diags {
-		if dg.Severity == doc.SeverityError {
-			return nil, fmt.Errorf("launch-time overrides: %s", dg.Message)
-		}
-	}
-
-	hostEnv := opts.HostEnv
-	if hostEnv == nil {
-		hostEnv = os.Environ()
-	}
-	declared := make(map[string]struct{}, len(d.Globals))
-	for name := range d.Globals {
-		declared[name] = struct{}{}
-	}
-
-	tmpDir, err := os.MkdirTemp("", "mdexec-")
-	if err != nil {
-		return nil, fmt.Errorf("temp dir: %w", err)
-	}
-	if err := writeHarnesses(tmpDir); err != nil {
-		os.RemoveAll(tmpDir)
-		return nil, err
-	}
-
-	return &Session{
-		d:        d,
-		opts:     opts,
-		declared: declared,
-		globals:  present,
-		hostEnv:  hostEnv,
-		tmpDir:   tmpDir,
-	}, nil
+	return newSession(d, opts, nil)
 }
 
 // send delivers an event under a lock so consumers never see concurrent
