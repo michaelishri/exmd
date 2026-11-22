@@ -8,36 +8,20 @@ import (
 	"github.com/michaelishri/exmd/internal/doc"
 )
 
-// SessionState is a restorable snapshot of a Session's document state (§4).
-// It carries only legal §4 inputs — globals, the block cursor, and outcome
-// bookkeeping — never a live process or leaked shell state. A snapshot saved
-// on one run can seed a fresh Session on another with NewSessionFromState.
+// SessionState is the §4 state a resumed session needs: declared globals and
+// the block cursor. It deliberately excludes outcome bookkeeping — a resumed
+// session starts fresh, with no inherited failure or interruption status.
 type SessionState struct {
-	// Restored distinguishes an empty restored state from a fresh session.
-	Restored bool
-
 	Globals map[string]string // declared globals currently present
 	Absent  []string          // declared globals currently absent
 	Next    int               // index of the next block to run
-
-	BlocksRun       int
-	Warnings        []string
-	LastFailedIndex int // -1 when no block has failed
-	LastStatus      int
-	Interrupted     bool
 }
 
 // State snapshots the session's current §4 state.
 func (s *Session) State() SessionState {
 	st := SessionState{
-		Restored:        true,
-		Globals:         s.Globals(),
-		Next:            s.next,
-		BlocksRun:       s.blocksRun,
-		Warnings:        s.Warnings(),
-		LastFailedIndex: -1,
-		LastStatus:      s.lastStatus,
-		Interrupted:     s.interrupted,
+		Globals: s.Globals(),
+		Next:    s.next,
 	}
 	for name := range s.declared {
 		if _, present := s.globals[name]; !present {
@@ -45,14 +29,6 @@ func (s *Session) State() SessionState {
 		}
 	}
 	sort.Strings(st.Absent)
-	if s.lastFailed != nil {
-		for i, b := range s.d.Blocks {
-			if b == s.lastFailed {
-				st.LastFailedIndex = i
-				break
-			}
-		}
-	}
 	return st
 }
 
@@ -61,36 +37,39 @@ func (s *Session) State() SessionState {
 // process (§4.2), not from the saved run — only declared globals survive a
 // resume, exactly as if they had arrived via --set and block harvests.
 func NewSessionFromState(d *doc.Document, opts Options, st SessionState) (*Session, error) {
-	if !st.Restored {
-		return newSession(d, opts, nil)
+	if err := ValidateState(d, st); err != nil {
+		return nil, fmt.Errorf("resume: %w", err)
 	}
+	return newSession(d, opts, &st)
+}
+
+// ValidateState checks that a saved state can be replayed against d. It is
+// shared by the engine's restore path and the tool's snapshot validation.
+func ValidateState(d *doc.Document, st SessionState) error {
 	if st.Next < 0 || st.Next > len(d.Blocks) {
-		return nil, fmt.Errorf("resume: next block %d is outside the document", st.Next)
-	}
-	if st.LastFailedIndex < -1 || st.LastFailedIndex >= len(d.Blocks) {
-		return nil, fmt.Errorf("resume: failed block %d is outside the document", st.LastFailedIndex)
+		return fmt.Errorf("next block %d is outside the document", st.Next)
 	}
 	for name := range st.Globals {
 		if _, declared := d.Globals[name]; !declared {
-			return nil, fmt.Errorf("resume: global %q is not declared", name)
+			return fmt.Errorf("global %q is not declared", name)
 		}
 	}
 	seen := make(map[string]bool, len(st.Absent))
 	for _, name := range st.Absent {
 		if _, declared := d.Globals[name]; !declared {
-			return nil, fmt.Errorf("resume: global %q is not declared", name)
+			return fmt.Errorf("global %q is not declared", name)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("resume: global %q is both present and absent", name)
+			return fmt.Errorf("global %q is both present and absent", name)
 		}
 		seen[name] = true
 	}
 	for name := range st.Globals {
 		if seen[name] {
-			return nil, fmt.Errorf("resume: global %q is both present and absent", name)
+			return fmt.Errorf("global %q is both present and absent", name)
 		}
 	}
-	return newSession(d, opts, &st)
+	return nil
 }
 
 // newSession stages the harnesses and applies the optional saved state.
@@ -141,13 +120,6 @@ func newSession(d *doc.Document, opts Options, st *SessionState) (*Session, erro
 			delete(s.globals, name)
 		}
 		s.next = st.Next
-		s.blocksRun = st.BlocksRun
-		s.warnings = append([]string(nil), st.Warnings...)
-		s.lastStatus = st.LastStatus
-		s.interrupted = st.Interrupted
-		if st.LastFailedIndex >= 0 && st.LastFailedIndex < len(d.Blocks) {
-			s.lastFailed = d.Blocks[st.LastFailedIndex]
-		}
 		// The initial globals observation already happened in the saved run.
 		s.emittedInitial = true
 	}

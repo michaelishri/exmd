@@ -80,6 +80,7 @@ type Model struct {
 	// inlineSession with the saved globals and block cursor.
 	snap          *session.Snapshot
 	restoredState exec.SessionState
+	resuming      bool
 	lastSave      time.Time
 	// engineBusy is true while a run goroutine owns inlineSession. State is
 	// only read from the snapshot taken before the run and after it ends.
@@ -127,6 +128,7 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 	}
 
 	m.snap = snap
+	m.resuming = true
 	m.blockSel = clamp(snap.BlockSel, -1, len(m.doc.Blocks)-1)
 	m.restoredState = snap.State()
 	interrupted := 0
@@ -611,7 +613,7 @@ func (m *Model) selectBlock(index int) {
 	if heading := m.headingForBlock(); heading >= 0 {
 		m.outline.sel = heading
 	}
-	m.saveSessionThrottled()
+	m.saveSession()
 }
 
 // exitBlockMode leaves executable-block selection and highlights the
@@ -623,7 +625,7 @@ func (m *Model) exitBlockMode() {
 		m.outline.sel = idx
 	}
 	m.jumpToSelected()
-	m.saveSessionThrottled()
+	m.saveSession()
 }
 
 // headingForBlock returns the outline entry index of the heading containing

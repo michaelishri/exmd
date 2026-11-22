@@ -83,6 +83,45 @@ func TestAcceptanceResumeFromExportedGlobal(t *testing.T) {
 	}
 }
 
+// Quitting for real while a block runs must save the interrupted state: the
+// engine's process group is cancelled, the run is finalized, and the snapshot
+// is written before the program exits.
+func TestAcceptanceQuitMidRunSavesRealSnapshot(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path := "testdata/sleep.md"
+
+	m := newViewerFromDoc(t, 120, 40, path, nil)
+	m.blockSel = 0
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	// Run the tea cmds in goroutines, as the Bubble Tea runtime does, so the
+	// block is still in flight when the quit key arrives.
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			go func(c tea.Cmd) { c() }(c)
+		}
+	}
+	time.Sleep(50 * time.Millisecond)
+	mm, _ = mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	s := savedSnapshotFor(t, path)
+	if len(s.Blocks) != 1 || s.Blocks[0].Active || !s.Blocks[0].Done {
+		t.Fatalf("in-flight run was not saved as stopped: %+v", s.Blocks)
+	}
+	res, err := doc.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Validate(res.Doc, nil); err != nil {
+		t.Fatalf("snapshot from quit cannot be resumed: %v", err)
+	}
+	restored := NewWithSnapshot(res, nil, s)
+	mm2, _ := restored.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	restored = runBlockAt(t, mm2.(Model), 0)
+	if out := strings.Join(restored.inline[0].lines, "\n"); !strings.Contains(out, "slow done") {
+		t.Fatalf("interrupted block could not be re-run: %q", out)
+	}
+}
+
 // A snapshot taken while a block was still running must come back as a
 // stopped block with its partial output, ready to be run again.
 func TestAcceptanceResumeAfterInterruption(t *testing.T) {
@@ -96,7 +135,6 @@ func TestAcceptanceResumeAfterInterruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.FailedIndex = -1
 	s.Next = 1 // the engine advances before a block executes
 	s.BlockSel = 0
 	s.Blocks = []session.BlockSnapshot{{
@@ -248,8 +286,8 @@ func TestAcceptanceLatestSnapshotWins(t *testing.T) {
 	m = runBlockAt(t, m, 1)
 
 	s := savedSnapshotFor(t, path)
-	if s.BlocksRun != 2 || s.Next != 2 {
-		t.Fatalf("snapshot did not accumulate: run=%d next=%d", s.BlocksRun, s.Next)
+	if len(s.Blocks) != 2 || s.Next != 2 {
+		t.Fatalf("snapshot did not accumulate: blocks=%d next=%d", len(s.Blocks), s.Next)
 	}
 	if s.Globals["GREETING"] != "hello from one" {
 		t.Fatalf("globals not accumulated: %+v", s.Globals)

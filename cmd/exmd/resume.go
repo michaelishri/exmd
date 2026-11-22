@@ -8,6 +8,16 @@ import (
 	"github.com/michaelishri/exmd/internal/session"
 )
 
+const resumeUsage = `exmd resume DOC [--set KEY=VALUE]... [--theme auto|dark|notty]
+                     reopen the last saved session for a runbook
+exmd resume --list   list saved sessions
+exmd resume DOC --clear
+                     discard a saved session
+
+A resume replays saved globals and block outputs into a fresh run. --set
+overrides must match the saved ones. If the document or a referenced script
+changed, clear the snapshot with --clear and start a new session.`
+
 // extractBool removes a stand-alone boolean flag from args and reports
 // whether it appeared. Flags may appear in any position.
 func extractBool(args []string, flag string) (rest []string, found bool) {
@@ -27,7 +37,7 @@ func extractBool(args []string, flag string) (rest []string, found bool) {
 func cmdResume(args []string) int {
 	args, help := extractHelp(args)
 	if help {
-		fmt.Println(usage)
+		fmt.Println(resumeUsage)
 		return 0
 	}
 	args, doClear := extractBool(args, "--clear")
@@ -39,7 +49,7 @@ func cmdResume(args []string) int {
 	}
 	sets, positional, err := parseSetArgs(args)
 	if errors.Is(err, errHelp) {
-		fmt.Println(usage)
+		fmt.Println(resumeUsage)
 		return 0
 	}
 	if err != nil {
@@ -49,7 +59,7 @@ func cmdResume(args []string) int {
 
 	if doList {
 		if doClear || len(positional) != 0 {
-			fmt.Fprintln(os.Stderr, "usage: exmd resume --list")
+			fmt.Fprintln(os.Stderr, resumeUsage)
 			return 2
 		}
 		snaps, err := session.List()
@@ -66,15 +76,15 @@ func cmdResume(args []string) int {
 			rows = append(rows, []string{
 				s.DocPath,
 				s.UpdatedAt.Local().Format("2006-01-02 15:04"),
-				fmt.Sprintf("%d", s.BlocksRun),
+				fmt.Sprintf("%d", len(s.Blocks)),
 			})
 		}
-		printTable([]string{"DOCUMENT", "SAVED", "BLOCKS RUN"}, rows)
+		printTable([]string{"DOCUMENT", "SAVED", "BLOCKS"}, rows)
 		return 0
 	}
 
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: exmd resume DOC [--set KEY=VALUE]... [--theme auto|dark|notty] | exmd resume DOC --clear | exmd resume --list")
+		fmt.Fprintln(os.Stderr, resumeUsage)
 		return 2
 	}
 	path := positional[0]

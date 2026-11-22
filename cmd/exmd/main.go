@@ -25,7 +25,7 @@ Usage:
   exmd DOC [--set K=V] [--theme auto|dark|notty]
                                     open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops)
   exmd resume DOC [--set K=V] [--theme auto|dark|notty]
-                                     reopen the last saved session for a runbook
+                                    reopen the last saved session for a runbook
   exmd resume --list                 list saved sessions
   exmd resume DOC --clear            discard a saved session
   exmd check DOC                 validate; report all diagnostics at once

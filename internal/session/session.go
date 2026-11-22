@@ -38,14 +38,9 @@ type Snapshot struct {
 	Globals map[string]string `yaml:"globals,omitempty"`
 	Absent  []string          `yaml:"absent,omitempty"`
 
-	Next        int             `yaml:"next"`
-	BlocksRun   int             `yaml:"blocks_run"`
-	Warnings    []string        `yaml:"warnings,omitempty"`
-	Interrupted bool            `yaml:"interrupted,omitempty"`
-	FailedIndex int             `yaml:"failed_index"`
-	ExitStatus  int             `yaml:"exit_status,omitempty"`
-	BlockSel    int             `yaml:"block_sel"`
-	Blocks      []BlockSnapshot `yaml:"blocks,omitempty"`
+	Next     int             `yaml:"next"`
+	BlockSel int             `yaml:"block_sel"`
+	Blocks   []BlockSnapshot `yaml:"blocks,omitempty"`
 
 	UpdatedAt time.Time `yaml:"updated_at"`
 }
@@ -145,7 +140,6 @@ func New(d *doc.Document, overrides map[string]string) (*Snapshot, error) {
 		Fingerprint: fp,
 		Overrides:   cloneMap(overrides),
 		Globals:     present,
-		FailedIndex: -1,
 		BlockSel:    -1,
 		UpdatedAt:   time.Now().UTC(),
 	}
@@ -177,10 +171,10 @@ func Load(docPath string) (*Snapshot, error) {
 func decode(data []byte, path string) (*Snapshot, error) {
 	var s Snapshot
 	if err := yaml.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse %s: %w; clear the snapshot with `exmd resume DOC --clear` and start a new session", path, err)
 	}
 	if s.Version != FormatVersion {
-		return nil, fmt.Errorf("parse %s: unsupported snapshot version %d (expected %d)", path, s.Version, FormatVersion)
+		return nil, fmt.Errorf("parse %s: unsupported snapshot version %d (expected %d); clear the snapshot with `exmd resume DOC --clear` and start a new session", path, s.Version, FormatVersion)
 	}
 	return &s, nil
 }
@@ -286,7 +280,7 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 	}
 	fp, err := Fingerprint(d)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot check the saved script files: %w; %s", err, hint)
 	}
 	if s.Fingerprint != fp {
 		return fmt.Errorf("the document or one of its scripts changed since the snapshot was saved; %s", hint)
@@ -294,34 +288,11 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 	if !sameMap(s.Overrides, overrides) {
 		return fmt.Errorf("--set overrides differ from the saved session; replay them or clear the snapshot with `exmd resume DOC --clear`")
 	}
-	if s.Next < 0 || s.Next > len(d.Blocks) {
-		return fmt.Errorf("saved block cursor %d is outside this document; %s", s.Next, hint)
+	if err := exec.ValidateState(d, s.State()); err != nil {
+		return fmt.Errorf("saved state is invalid: %w; %s", err, hint)
 	}
 	if s.BlockSel < -1 || s.BlockSel >= len(d.Blocks) {
 		return fmt.Errorf("saved block selection %d is outside this document; %s", s.BlockSel, hint)
-	}
-	if s.FailedIndex < -1 || s.FailedIndex >= len(d.Blocks) {
-		return fmt.Errorf("saved failure index %d is outside this document; %s", s.FailedIndex, hint)
-	}
-	for name := range s.Globals {
-		if _, ok := d.Globals[name]; !ok {
-			return fmt.Errorf("saved global %q is no longer declared; %s", name, hint)
-		}
-	}
-	seen := map[string]bool{}
-	for _, name := range s.Absent {
-		if _, ok := d.Globals[name]; !ok {
-			return fmt.Errorf("saved global %q is no longer declared; %s", name, hint)
-		}
-		if seen[name] {
-			return fmt.Errorf("saved global %q is duplicated; %s", name, hint)
-		}
-		seen[name] = true
-	}
-	for name := range s.Globals {
-		if seen[name] {
-			return fmt.Errorf("saved global %q is both present and absent; %s", name, hint)
-		}
 	}
 	for _, b := range s.Blocks {
 		if b.Index < 0 || b.Index >= len(d.Blocks) {
@@ -334,15 +305,9 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 // State converts the saved globals and cursor into exec state.
 func (s *Snapshot) State() exec.SessionState {
 	return exec.SessionState{
-		Restored:        true,
-		Globals:         cloneMap(s.Globals),
-		Absent:          append([]string(nil), s.Absent...),
-		Next:            s.Next,
-		BlocksRun:       s.BlocksRun,
-		Warnings:        append([]string(nil), s.Warnings...),
-		LastFailedIndex: s.FailedIndex,
-		LastStatus:      s.ExitStatus,
-		Interrupted:     s.Interrupted,
+		Globals: cloneMap(s.Globals),
+		Absent:  append([]string(nil), s.Absent...),
+		Next:    s.Next,
 	}
 }
 

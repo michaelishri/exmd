@@ -88,7 +88,6 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Next = 1
-	s.BlocksRun = 1
 	s.BlockSel = 0
 	s.Globals["GREETING"] = "hello world"
 	s.Blocks = []BlockSnapshot{{
@@ -115,7 +114,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if got == nil {
 		t.Fatal("snapshot not loaded")
 	}
-	if got.Version != FormatVersion || got.Next != 1 || got.BlocksRun != 1 || got.BlockSel != 0 {
+	if got.Version != FormatVersion || got.Next != 1 || got.BlockSel != 0 {
 		t.Fatalf("wrong header: %+v", got)
 	}
 	if got.Globals["GREETING"] != "hello world" || got.Overrides["TOKEN"] != "override" {
@@ -231,12 +230,12 @@ func TestValidate(t *testing.T) {
 	}
 	bad := *s
 	bad.Globals = map[string]string{"NOPE": "x"}
-	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "no longer declared") {
+	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "not declared") {
 		t.Fatalf("undeclared global: %v", err)
 	}
 	bad = *s
 	bad.Next = 99
-	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "outside this document") {
+	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "outside the document") {
 		t.Fatalf("bad cursor: %v", err)
 	}
 	bad = *s
@@ -257,12 +256,11 @@ func TestValidate(t *testing.T) {
 func TestDeleteAndList(t *testing.T) {
 	isolate(t)
 	paths := []string{writeDoc(t, flowSource), writeDoc(t, flowSource)}
-	for i, p := range paths {
+	for _, p := range paths {
 		s, err := New(load(t, p), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		s.BlocksRun = i
 		if err := Save(p, s); err != nil {
 			t.Fatal(err)
 		}
@@ -297,16 +295,12 @@ func TestStateConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Next = 1
-	s.BlocksRun = 1
-	s.FailedIndex = 0
-	s.ExitStatus = 3
-	s.Interrupted = true
 	s.Globals["GREETING"] = "hello"
-	s.Warnings = []string{"warn"}
 	st := s.State()
-	if !st.Restored || st.Next != 1 || st.BlocksRun != 1 || st.LastFailedIndex != 0 ||
-		st.LastStatus != 3 || !st.Interrupted || st.Globals["GREETING"] != "hello" ||
-		!reflect.DeepEqual(st.Warnings, []string{"warn"}) {
+	if st.Next != 1 || st.Globals["GREETING"] != "hello" {
 		t.Fatalf("State() = %+v", st)
+	}
+	if st.Globals["TOKEN"] != "default" {
+		t.Fatalf("default global lost: %+v", st.Globals)
 	}
 }

@@ -69,7 +69,7 @@ func launchTUI(res *doc.Result, overrides map[string]string, themeName string, s
 		return 2
 	}
 
-	model := tui.New(res, overrides)
+	var model tea.Model = tui.New(res, overrides)
 	if snap != nil {
 		model = tui.NewWithSnapshot(res, overrides, snap)
 	}

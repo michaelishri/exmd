@@ -59,6 +59,12 @@ func TestResumeExitCodes(t *testing.T) {
 			t.Fatalf("resume --list DOC = %d, want 2", got)
 		}
 	})
+	t.Run("list and clear conflict", func(t *testing.T) {
+		path := setupResume(t)
+		if got := run([]string{"resume", "--list", "--clear", path}); got != 2 {
+			t.Fatalf("resume --list --clear = %d, want 2", got)
+		}
+	})
 	t.Run("no args", func(t *testing.T) {
 		setupResume(t)
 		if got := run([]string{"resume"}); got != 2 {

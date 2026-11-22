@@ -51,8 +51,8 @@ func TestSessionAutoSavedThenRestored(t *testing.T) {
 
 	// A completed run saves immediately — no explicit save call needed.
 	s := savedSnapshot(t)
-	if s.Next != 1 || s.BlocksRun != 1 {
-		t.Fatalf("saved cursor = %d, blocks run = %d", s.Next, s.BlocksRun)
+	if s.Next != 1 {
+		t.Fatalf("saved cursor = %d", s.Next)
 	}
 	if s.Globals["GREETING"] != "hello from one" {
 		t.Fatalf("saved globals = %+v", s.Globals)
@@ -102,7 +102,6 @@ func TestRestoredActiveRunIsMarkedStopped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.FailedIndex = -1
 	s.BlockSel = 0
 	s.Blocks = []session.BlockSnapshot{{
 		Index: 0, Lines: []string{"partial output"}, Active: true,

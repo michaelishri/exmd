@@ -50,7 +50,7 @@ func TestStateRoundTripCarriesGlobalsAndCursor(t *testing.T) {
 	if !strings.Contains(out, "hello from block 1") {
 		t.Fatalf("block 1 output: %q", out)
 	}
-	if state.Next != 1 || state.BlocksRun != 1 {
+	if state.Next != 1 {
 		t.Fatalf("state after block 1: %+v", state)
 	}
 	if state.Globals["GREETING"] != "hello world" {
@@ -117,14 +117,13 @@ func TestStateRoundTripPreservesAbsence(t *testing.T) {
 
 func TestNewSessionFromStateRejectsInvalidState(t *testing.T) {
 	d := loadFlow(t)
-	base := SessionState{Restored: true, Next: 1, LastFailedIndex: -1}
+	base := SessionState{Next: 1}
 	for _, tc := range []struct {
 		name string
 		edit func(*SessionState)
 	}{
 		{"next past end", func(s *SessionState) { s.Next = 99 }},
 		{"negative next", func(s *SessionState) { s.Next = -1 }},
-		{"bad failure index", func(s *SessionState) { s.LastFailedIndex = 42 }},
 		{"undeclared global", func(s *SessionState) { s.Globals = map[string]string{"NOPE": "x"} }},
 		{"undeclared absent", func(s *SessionState) { s.Absent = []string{"NOPE"} }},
 		{"both present and absent", func(s *SessionState) {
@@ -147,7 +146,7 @@ func TestNewSessionFromStateRejectsInvalidState(t *testing.T) {
 
 func TestFreshStateKeepsDefaults(t *testing.T) {
 	d := loadFlow(t)
-	s, err := NewSessionFromState(d, Options{}, SessionState{})
+	s, err := NewSession(d, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

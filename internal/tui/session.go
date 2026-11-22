@@ -60,11 +60,6 @@ func (m *Model) captureSnapshot() {
 		s.Globals = st.Globals
 		s.Absent = st.Absent
 		s.Next = st.Next
-		s.BlocksRun = st.BlocksRun
-		s.Warnings = st.Warnings
-		s.Interrupted = st.Interrupted
-		s.FailedIndex = st.LastFailedIndex
-		s.ExitStatus = st.LastStatus
 	}
 
 	var blocks []session.BlockSnapshot

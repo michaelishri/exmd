@@ -152,7 +152,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 			s   *exec.Session
 			err error
 		)
-		if m.restoredState.Restored {
+		if m.resuming {
 			s, err = exec.NewSessionFromState(m.doc,
 				exec.Options{Overrides: m.overrides}, m.restoredState)
 		} else {
