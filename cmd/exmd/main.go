@@ -24,6 +24,10 @@ const usage = `exmd — executable Markdown (runbooks)
 Usage:
   exmd DOC [--set K=V] [--theme auto|dark|notty]
                                     open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops)
+  exmd resume DOC [--set K=V] [--theme auto|dark|notty]
+                                     reopen the last saved session for a runbook
+  exmd resume --list                 list saved sessions
+  exmd resume DOC --clear            discard a saved session
   exmd check DOC                 validate; report all diagnostics at once
   exmd list DOC                  enumerate executable blocks
   exmd globals DOC [--set K=V]   show the document's global variables
@@ -36,6 +40,11 @@ frontmatter; the frontmatter is the complete contract of the document's
 variable surface (SPEC.md §2.2). --theme selects the palette for the TUI and
 print: auto (the default) is dark when the terminal supports color and notty
 otherwise; dark and notty force their palette.
+
+The TUI saves one session per document as you work. The resume command restores
+its globals, block outputs, and selected block; nothing about the spec's state
+model changes (SPEC.md §9). A snapshot is invalidated when the document or a
+script it references is edited.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
@@ -144,6 +153,8 @@ func run(args []string) int {
 		return cmdGlobals(args[1:])
 	case "print":
 		return cmdPrint(args[1:])
+	case "resume":
+		return cmdResume(args[1:])
 	case "--help", "-h", "help":
 		fmt.Println(usage)
 		return 0
