@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -57,10 +58,12 @@ type inlineState struct {
 const shutdownGrace = 5 * time.Second
 
 // shutdownInline cancels in-flight runs and waits for them to finish before
-// closing the session: a Session is not safe for concurrent use.
+// closing the session: a Session is not safe for concurrent use. Any run still
+// active is finalized here, so its partial output and interrupted status are
+// in the snapshot written on quit.
 func (m *Model) shutdownInline() {
-	var active []*inlineState
-	for _, st := range m.inline {
+	var active []int
+	for index, st := range m.inline {
 		if st == nil {
 			continue
 		}
@@ -68,11 +71,22 @@ func (m *Model) shutdownInline() {
 			st.cancel()
 		}
 		if st.active && st.finished != nil {
-			active = append(active, st)
+			active = append(active, index)
 		}
 	}
-	for _, st := range active {
+	for _, index := range active {
+		st := m.inline[index]
 		waitInline(st, shutdownGrace)
+		if !st.active {
+			continue // finalized through the normal event pipeline
+		}
+		if st.result != nil {
+			m.finalizeInline(index, st.result)
+		} else {
+			st.active = false
+			st.done = true
+			st.err = errors.New("run interrupted on exit")
+		}
 	}
 	if m.inlineSession != nil {
 		m.inlineSession.Close()
@@ -134,7 +148,16 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	// One session for all inline runs carries the harvest delta between
 	// blocks (SPEC.md §4.3): running #3 then #9 sees #3's WORK.
 	if m.inlineSession == nil {
-		s, err := exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
+		var (
+			s   *exec.Session
+			err error
+		)
+		if m.restoredState.Restored {
+			s, err = exec.NewSessionFromState(m.doc,
+				exec.Options{Overrides: m.overrides}, m.restoredState)
+		} else {
+			s, err = exec.NewSession(m.doc, exec.Options{Overrides: m.overrides})
+		}
 		if err != nil {
 			st.err, st.active, st.done = err, false, true
 			m.rebuildInlineBox(index)
@@ -149,11 +172,13 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	// Show the separator immediately, before the first output event.
 	m.rebuildInlineBox(index)
 	m.setContent()
+	m.saveSession() // record that this run is active
 
 	ch := make(chan exec.Event, eventChanBuffer)
 	finished := make(chan struct{})
 	st.ch, st.finished = ch, finished
 	emit := func(ev exec.Event) { ch <- ev }
+	m.engineBusy = true
 
 	runCmd := func() tea.Msg {
 		defer close(finished)
@@ -198,6 +223,7 @@ func (m *Model) applyInlineEvent(index int, ev exec.Event) {
 	st.applyEvent(ev)
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
+	m.saveSessionThrottled()
 }
 
 // write accumulates output chunks into complete lines, stripping ANSI like
@@ -239,8 +265,10 @@ func (m *Model) finalizeInline(index int, result *exec.RunResult) {
 	st.result = result
 	st.active = false
 	st.done = true
+	m.engineBusy = false
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
+	m.saveSession()
 }
 
 // refreshInlineContent re-sets the viewport content when output grows,
