@@ -35,16 +35,17 @@ func cmdTUI(args []string) int {
 		return 2
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: exmd DOC [--set KEY=VALUE]... [--theme auto|dark|notty]")
+		fmt.Fprintln(os.Stderr, "usage: exmd DOC [--set KEY=VALUE]... [--theme NAME]")
 		return 2
 	}
 
-	th, err := resolveTheme(themeName)
+	th, err := resolveInvocationTheme(themeName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
 	tui.SetTheme(th)
+	setDiagnosticTheme(th)
 
 	res, code := loadDoc(positional[0])
 	if res == nil {

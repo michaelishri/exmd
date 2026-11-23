@@ -141,17 +141,16 @@ func (o *outlineModel) last() bool {
 }
 
 // Sidebar geometry: one base column of left padding at the top level
-// (deeper heading levels indent from there), and one blank row inset at the
-// top and bottom of the column.
+// (deeper heading levels indent from there), and one blank pad row at the
+// top and bottom of the strip.
 const panePad = 1
 
-// view renders the sidebar as a full-height shaded column: a blank pad
-// row, the document's title as the title row (two columns in), a blank
-// pad row, then the entries, with blank rows padding the bottom. The
-// layout is identical whether or not the sidebar holds focus — the focus
-// border is drawn beside the strip, in the gutter. While the sidebar does
-// not hold focus the strip rests on the muted panel background; focus
-// lifts it to the full panel color.
+// view renders the sidebar as a full-height shaded column: a blank pad row,
+// the document's title (two columns in), a blank pad row, then the packed
+// entries, with blank rows padding the bottom. The layout is identical
+// whether or not the sidebar holds focus — focus is expressed by shading
+// alone. While the sidebar does not hold focus the strip rests on the panel
+// shade; focus lifts it to the raised element shade.
 func (o *outlineModel) view(height int, focused bool) string {
 	if !o.visible {
 		return ""
@@ -191,7 +190,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 		setRow(titleRow, titleBg.Width(o.width).Render(titleText))
 	}
 
-	top := 3 // pad + title + pad
+	top := 3 // top pad + title + pad
 	bottomPad := 1
 	visible := height - top - bottomPad
 	if visible < 1 {

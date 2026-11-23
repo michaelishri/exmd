@@ -176,7 +176,7 @@ func TestURLHintAppearsOnlyWithURLs(t *testing.T) {
 	m := enterBlockModeFromFirstHeading(t, newViewerFromDoc(t, 120, 40, "testdata/urls.md", nil))
 	footer := func(m Model) string {
 		lines := strings.Split(m.View(), "\n")
-		return ansi.Strip(lines[len(lines)-1])
+		return ansi.Strip(lines[len(lines)-2])
 	}
 	if strings.Contains(footer(m), "u url") {
 		t.Fatal("u hint shown before the block has output")

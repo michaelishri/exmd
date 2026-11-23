@@ -3,7 +3,13 @@ package main
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/michaelishri/exmd/internal/config"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 const demo = "../../examples/demo/demo.md"
@@ -138,6 +144,60 @@ func TestParsePrintArgs(t *testing.T) {
 	}
 }
 
+// TestUsageListsThemes keeps the help text in step with the theme registry.
+func TestUsageListsThemes(t *testing.T) {
+	for _, name := range theme.Names() {
+		if !strings.Contains(usage, name) {
+			t.Errorf("usage does not list theme %q", name)
+		}
+	}
+}
+
+// TestResolveInvocationTheme checks flag-over-config-over-default precedence.
+func TestResolveInvocationTheme(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	wantDefault, err := resolveTheme("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := resolveInvocationTheme(""); err != nil || got.Name != wantDefault.Name {
+		t.Fatalf("default = %q, %v; want %q", got.Name, err, wantDefault.Name)
+	}
+
+	if err := config.Save(config.Config{Theme: "catppuccin-mocha"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveInvocationTheme(""); err != nil || got.Name != "catppuccin-mocha" {
+		t.Fatalf("saved theme = %q, %v", got.Name, err)
+	}
+	if got, err := resolveInvocationTheme("one-dark"); err != nil || got.Name != "one-dark" {
+		t.Fatalf("flag override = %q, %v", got.Name, err)
+	}
+
+	if err := config.Save(config.Config{Theme: "no-such-theme"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveInvocationTheme(""); err != nil || got.Name != wantDefault.Name {
+		t.Fatalf("invalid saved theme = %q, %v; want default %q",
+			got.Name, err, wantDefault.Name)
+	}
+}
+
+// TestDiagnosticThemeFollowsSelection checks that warnings printed before
+// the TUI use the palette chosen with --theme.
+func TestDiagnosticThemeFollowsSelection(t *testing.T) {
+	prev := diagnosticPalette
+	defer setDiagnosticTheme(prev)
+
+	setDiagnosticTheme(theme.CatppuccinLatte)
+	want := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.CatppuccinLatte.Error)).Render("x")
+	if got := styleErr.Render("x"); got != want {
+		t.Errorf("diagnostic style = %q, want %q", got, want)
+	}
+}
+
 func TestRunExitCodes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -154,6 +214,8 @@ func TestRunExitCodes(t *testing.T) {
 		{"globals bad override", []string{"globals", demo, "--set", "BAD"}, 2},
 		{"print short width", []string{"print", demo, "-width=40"}, 0},
 		{"print dark", []string{"print", demo, "--theme=dark"}, 0},
+		{"print preset", []string{"print", demo, "--theme=catppuccin-mocha"}, 0},
+		{"print alias", []string{"print", demo, "--theme=atom"}, 0},
 		{"print notty", []string{"print", demo, "--theme=notty"}, 0},
 		{"print bad theme", []string{"print", demo, "--theme=bogus"}, 2},
 		{"tui bad theme", []string{demo, "--theme=bogus"}, 2},

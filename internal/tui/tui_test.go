@@ -5,9 +5,12 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 func newViewer(t *testing.T, w, h int) Model {
@@ -43,7 +46,7 @@ func TestViewerLayout(t *testing.T) {
 	if m.outline.width != 50 {
 		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-50-gutterWidth-railWidth-1 {
+	if m.content.Width != 120-50-gutterWidth-railWidth {
 		t.Fatalf("content width = %d", m.content.Width)
 	}
 	v := m.View()
@@ -58,17 +61,29 @@ func TestViewerLayout(t *testing.T) {
 	if !strings.Contains(v, "exmd feature tour") {
 		t.Fatal("document content missing")
 	}
-	// Footer: a hairline, context-aware hints on the left, file path right.
+	// No hairline; the sidebar runs to the bottom with the path in its footer.
 	lines := strings.Split(v, "\n")
-	if strings.TrimSpace(lines[0]) != "" {
-		t.Fatalf("missing top margin row: %q", lines[0])
+	// The sidebar is painted from row 0, with one blank pad row before the
+	// title text on row 1.
+	if strings.TrimSpace(ansi.Strip(lines[0])) != "" {
+		t.Fatalf("sidebar top pad row is not blank: %q", lines[0])
 	}
-	if !strings.HasPrefix(ansi.Strip(lines[len(lines)-2]), "─") {
-		t.Fatalf("no footer separator: %q", lines[len(lines)-2])
+	if !strings.Contains(ansi.Strip(lines[1]), "exmd feature tour") {
+		t.Fatalf("sidebar title missing from row 1: %q", lines[1])
 	}
-	footer := ansi.Strip(lines[len(lines)-1])
-	if !strings.Contains(footer, "j/k scroll") || !strings.Contains(footer, "examples/demo/demo.md") {
-		t.Fatalf("footer missing hints or path: %q", footer)
+	if strings.Contains(v, "─") {
+		t.Fatal("footer separator should be gone")
+	}
+	footer := ansi.Strip(lines[len(lines)-2])
+	if !strings.Contains(footer, "j/k scroll") {
+		t.Fatalf("footer missing hints: %q", footer)
+	}
+	leftWidth := railWidth + m.content.Width + gutterWidth
+	if got := string([]rune(footer)[leftWidth:]); !strings.HasPrefix(got, "  ../../examples/demo/demo.md") {
+		t.Fatalf("sidebar footer path is not left-aligned: %q", got)
+	}
+	if last := ansi.Strip(lines[len(lines)-1]); strings.TrimSpace(last) != "" {
+		t.Fatalf("missing bottom margin row: %q", last)
 	}
 	// Viewer viewport: pane height minus the content's two padding rows.
 	if m.content.Height != 35 {
@@ -79,15 +94,66 @@ func TestViewerLayout(t *testing.T) {
 	}
 }
 
+// TestSidebarSpansFullHeight checks that the sidebar surface reaches the
+// bottom of the viewport, including its footer and bottom blank rows.
+func TestSidebarSpansFullHeight(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != m.height {
+		t.Fatalf("view has %d rows, want %d", len(lines), m.height)
+	}
+	panel := "48;2;24;24;30" // theme.Dark.BackgroundPanel
+	painted := 0
+	for _, line := range lines {
+		if strings.Contains(line, panel) {
+			painted++
+		}
+	}
+	// Every row except the selected title carries the panel shade.
+	if painted < m.height-2 {
+		t.Fatalf("sidebar panel covers %d of %d rows", painted, m.height)
+	}
+}
+
+// TestFooterBandSurface checks that the left footer is painted on a surface
+// lighter than the sidebar's raised shade.
+func TestFooterBandSurface(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newViewer(t, 120, 40)
+	lines := strings.Split(m.View(), "\n")
+	footer := lines[len(lines)-2]
+	want := termenv.TrueColor.
+		Color(string(theme.Lift(theme.Dark.BackgroundElement, 0.12))).Sequence(true)
+	if !strings.Contains(footer, want) {
+		t.Fatalf("footer has no lifted surface (%s): %q", want, footer)
+	}
+}
+
 func TestFooterIsContextAware(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	footer := func(m Model) string {
 		lines := strings.Split(m.View(), "\n")
-		return ansi.Strip(lines[len(lines)-1])
+		return ansi.Strip(lines[len(lines)-2])
 	}
 
-	// Viewer: scrolling hints.
-	if f := footer(m); !strings.Contains(f, "j/k scroll") ||
+	lines := strings.Split(m.View(), "\n")
+	if pad := ansi.Strip(lines[len(lines)-3]); strings.TrimSpace(pad) != "" {
+		t.Fatalf("row above the footer is not blank: %q", pad)
+	}
+	if last := ansi.Strip(lines[len(lines)-1]); strings.TrimSpace(last) != "" {
+		t.Fatalf("bottom row is not blank: %q", last)
+	}
+
+	// Viewer: scrolling hints, inset by two columns from the left edge.
+	if f := footer(m); !strings.HasPrefix(f, "  ") ||
+		strings.HasPrefix(f, "   ") || !strings.Contains(f, "j/k scroll") ||
 		!strings.Contains(f, "examples/demo/demo.md") {
 		t.Fatalf("viewer footer = %q", f)
 	}

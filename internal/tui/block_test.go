@@ -139,13 +139,13 @@ func TestBlockRailSpansBlock(t *testing.T) {
 	lines := strings.Split(v, "\n")
 	badgePane := bm.Line - got.content.YOffset + 1
 	if badgePane >= 0 && badgePane < got.paneHeight &&
-		strings.Contains(ansi.Strip(lines[1+badgePane]), "▌") {
+		strings.Contains(ansi.Strip(lines[badgePane]), "▌") {
 		t.Fatal("rail should start below the metadata row")
 	}
 	// The first bar row is the block's first shaded row.
 	if start >= 0 && start < got.paneHeight {
-		if !strings.Contains(ansi.Strip(lines[1+start]), "▌") {
-			t.Fatalf("rail bar missing at the code block's first row: %q", ansi.Strip(lines[1+start]))
+		if !strings.Contains(ansi.Strip(lines[start]), "▌") {
+			t.Fatalf("rail bar missing at the code block's first row: %q", ansi.Strip(lines[start]))
 		}
 	}
 }
@@ -294,7 +294,7 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 		end := got.displayLine(bm.End) - got.content.YOffset + 1
 		found := false
 		for r := start; r < end && r < got.paneHeight && r+1 < len(viewLines); r++ {
-			if strings.Contains(viewLines[1+r], wantStyle.Render("▌")) {
+			if strings.Contains(viewLines[r], wantStyle.Render("▌")) {
 				found = true
 			}
 		}

@@ -198,7 +198,7 @@ func TestCopyFlashClearsOnNextKey(t *testing.T) {
 		t.Fatalf("footer reaction persisted after the next key: %q", got.flash)
 	}
 	lines := strings.Split(got.View(), "\n")
-	footer := ansi.Strip(lines[len(lines)-1])
+	footer := ansi.Strip(lines[len(lines)-2])
 	if !strings.Contains(footer, "j/k blocks") || !strings.Contains(footer, "c copy") {
 		t.Fatalf("key hints did not return: %q", footer)
 	}

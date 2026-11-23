@@ -16,7 +16,7 @@ import (
 // full height; a blank pad row, the title row (the document's first h1, two
 // columns in), a blank pad row, then the packed entries (one column of base
 // left padding, no blank lines between entries); blank shaded rows fill the
-// rest, and the outer margin rows sit outside the strip.
+// rest of the strip, flush to the right edge.
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
@@ -26,7 +26,7 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
 	}
 
-	// Top pad row, then the title (the first h1, two columns in), then
+	// A blank pad row, then the title (the first h1, two columns in), then
 	// another pad row.
 	if lines[0] == "" || strings.TrimSpace(lines[0]) != "" {
 		t.Fatalf("top pad row missing: %q", lines[0])
@@ -67,8 +67,8 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 			t.Fatalf("row %d has no base padding: %q", r, lines[r])
 		}
 	}
-	// Blank shaded rows fill the rest of the column — full height, with
-	// the outer margins sitting outside the strip.
+	// Blank shaded rows fill the rest of the column — full height, flush
+	// to the right edge with no outer margin.
 	if lines[len(lines)-1] == "" {
 		t.Fatal("strip should be painted to the bottom of the body")
 	}
@@ -118,46 +118,28 @@ func TestRailMarksHeadingLine(t *testing.T) {
 	}
 }
 
-// TestFocusBorderMoves checks the border behavior across focus: the
-// sidebar's left border line is present in both states (muted, matching the exec separator —
-// focus is expressed by the strip's background lift), and the viewport
-// frame never renders.
+// TestFocusBorderMoves checks that no sidebar border is drawn in any focus
+// state and that the viewport frame never renders.
 func TestFocusBorderMoves(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	v := m.View()
-	if n := strings.Count(v, "┌"); n != 0 {
-		t.Fatalf("frame boxes = %d, want 0 (no viewport frame)", n)
-	}
-	if n := strings.Count(v, "│"); n != m.paneHeight {
-		t.Fatalf("sidebar border rows = %d, want %d", n, m.paneHeight)
-	}
+	resting := m.View()
 
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	got := mm.(Model)
-	v = got.View()
-	if n := strings.Count(v, "┌"); n != 0 {
-		t.Fatalf("frame boxes after tab = %d, want 0", n)
-	}
-	if n := strings.Count(v, "│"); n != got.paneHeight {
-		t.Fatalf("sidebar border rows after tab = %d, want %d", n, got.paneHeight)
-	}
+	focused := mm.(Model).View()
 
-	// Tab back: the border stays, the frame stays gone.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyTab})
-	got = mm.(Model)
-	v = got.View()
-	if n := strings.Count(v, "┌"); n != 0 {
-		t.Fatalf("frame boxes after tab back = %d, want 0", n)
-	}
-	if n := strings.Count(v, "│"); n != got.paneHeight {
-		t.Fatalf("sidebar border rows after tab back = %d, want %d", n, got.paneHeight)
+	for name, v := range map[string]string{"resting": resting, "focused": focused} {
+		if n := strings.Count(v, "│"); n != 0 {
+			t.Errorf("%s view has %d sidebar border rows, want 0", name, n)
+		}
+		if n := strings.Count(v, "┌"); n != 0 {
+			t.Errorf("%s view has %d frame boxes, want 0", name, n)
+		}
 	}
 }
 
 // TestSidebarFocusKeepsLayout checks the focused sidebar: the strip's own
-// rendering is identical with and without focus (nothing shifts), and the
-// only focus artifact is a muted left border line in the gutter beside
-// the strip — one per body row, gone again when focus returns.
+// rendering is identical with and without focus (nothing shifts), and focus
+// is expressed by shading alone — no extra chrome in the gutter.
 func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	unfocused := strings.Split(m.outline.view(m.paneHeight, false), "\n")
@@ -171,41 +153,18 @@ func TestSidebarFocusKeepsLayout(t *testing.T) {
 		}
 	}
 
-	// The border lives in the gutter beside the strip while focused.
+	// Focus adds no border or frame in the full view either.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	got := mm.(Model)
-	v := got.View()
-	lines := strings.Split(v, "\n")
-	borderCol := railWidth + m.content.Width + gutterWidth - 1
-	for i := 1; i <= got.paneHeight; i++ {
-		stripped := ansi.Strip(lines[i])
-		if cellAt(stripped, borderCol) != "│" {
-			t.Fatalf("body row %d missing the focus border at column %d: %q", i, borderCol, stripped)
-		}
-	}
-	// And the frame stays gone.
-	if strings.Contains(ansi.Strip(lines[0]), "┌") {
-		t.Fatal("the viewport frame should be gone with the sidebar focused")
+	v := mm.(Model).View()
+	if strings.Contains(v, "│") || strings.Contains(v, "┌") {
+		t.Fatal("focus added border or frame chrome")
 	}
 }
 
-// cellAt returns the rune at the given display column of a stripped line.
-func cellAt(s string, col int) string {
-	w := 0
-	for _, r := range s {
-		if w == col {
-			return string(r)
-		}
-		w++
-	}
-	return ""
-}
-
-// TestSidebarFocusShading checks the resting-to-focused lift: while the
-// sidebar rests, its entry rows carry no background at all (they blend into
-// the page like the text area) and its border line is muted chrome; focus
-// lifts them onto the panel background; the border stays muted. (The title
-// row is excluded: at the top of the document it holds the cursor.)
+// TestSidebarFocusShading checks the resting-to-focused lift: the strip is
+// painted for its full height on the panel shade at rest, and focus lifts it
+// to the raised element shade. No border is drawn in either state. (The
+// title row is excluded: at the top of the document it holds the cursor.)
 // TrueColor is forced so the exact colors are assertable.
 func TestSidebarFocusShading(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
@@ -220,23 +179,19 @@ func TestSidebarFocusShading(t *testing.T) {
 	if ansi.Strip(unfocused[3]) != ansi.Strip(focused[3]) {
 		t.Fatal("test setup: the rows should carry the same text")
 	}
-	if strings.Contains(unfocused[3], "48;2;") {
-		t.Fatalf("resting rows should carry no background: %q", unfocused[3])
+	if !strings.Contains(unfocused[3], "48;2;24;24;30") {
+		t.Fatalf("resting row should use the panel background: %q", unfocused[3])
 	}
 	if !strings.Contains(unfocused[3], "38;2;227;227;233") {
 		t.Fatalf("resting row should keep its bright text color: %q", unfocused[3])
 	}
-	if !strings.Contains(focused[3], "48;2;24;24;30") {
-		t.Fatalf("focused row should use the panel background: %q", focused[3])
+	if !strings.Contains(focused[3], "48;2;36;36;44") {
+		t.Fatalf("focused row should lift to the element background: %q", focused[3])
 	}
 
-	// The sidebar border matches the exec block's separator, in both states.
-	uv, fv := m.View(), gotFocusedView(t)
-	if !strings.Contains(uv, sideBorderStyle.Render("│")) {
-		t.Fatal("resting border should be muted, like the output separator")
-	}
-	if !strings.Contains(fv, sideBorderStyle.Render("│")) {
-		t.Fatal("focused border should be muted, like the output separator")
+	// Neither focus state draws a border beside the strip.
+	if strings.Contains(m.View(), "│") || strings.Contains(gotFocusedView(t), "│") {
+		t.Fatal("sidebar should have no left border")
 	}
 }
 

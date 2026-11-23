@@ -13,7 +13,7 @@ import (
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
-const printUsage = "usage: exmd print DOC [--width N] [--theme auto|dark|notty]"
+const printUsage = "usage: exmd print DOC [--width N] [--theme NAME]"
 
 // parsePrintArgs parses print's flags, accepting both dash forms for --width
 // and --theme via the shared flag parser.
@@ -61,11 +61,20 @@ func cmdPrint(args []string) int {
 		return 2
 	}
 
-	th, err := resolveTheme(themeName)
+	th, err := resolveInvocationTheme(themeName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd print: %v\n", err)
 		return 2
 	}
+
+	tty := term.IsTerminal(int(os.Stdout.Fd()))
+	// A non-TTY stream and --theme notty both suppress color. Otherwise
+	// the resolved theme owns every color in the output, including the
+	// canvas behind the lines and the diagnostics.
+	if !tty || !colorSupported() {
+		th = theme.Notty
+	}
+	setDiagnosticTheme(th)
 
 	res, code := loadDoc(positional[0])
 	if res == nil {
@@ -77,7 +86,6 @@ func cmdPrint(args []string) int {
 		return 2
 	}
 
-	tty := term.IsTerminal(int(os.Stdout.Fd()))
 	if width == 0 {
 		if tty {
 			if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
@@ -87,12 +95,6 @@ func cmdPrint(args []string) int {
 		if width <= 0 {
 			width = render.DefaultWidth
 		}
-	}
-	// A non-TTY stream and --theme notty both suppress color. Otherwise
-	// the resolved theme owns every color in the output, including the
-	// canvas behind the lines.
-	if !tty || !colorSupported() {
-		th = theme.Notty
 	}
 
 	out := render.Render(res.Doc, width, th)

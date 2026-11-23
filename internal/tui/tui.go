@@ -27,10 +27,9 @@ const (
 	sidebarCols     = 50
 	gutterWidth     = 2
 	railWidth       = 1
-	rightMargin     = 1
 	minViewWidth    = 20
 	minViewHeight   = 4
-	footerRows      = 3
+	footerRows      = 3 // blank pad, footer row, blank row below
 	paneInsets      = 2
 	minContentWidth = 10
 )
@@ -55,8 +54,8 @@ type Model struct {
 	focus   focusArea
 
 	// Cached row strings. Built on resize, reused on every View.
-	sep, blankRow, gutterRow string
-	shifts                   []int // inserted box lines per rendered line
+	blankRow, gutterRow string
+	shifts              []int // inserted box lines per rendered line
 
 	overrides map[string]string
 	theme     theme.Theme
@@ -83,6 +82,9 @@ type Model struct {
 
 	// sel is the active mouse text selection in the content pane.
 	sel textSelection
+
+	// settings holds the settings panel state when it is open.
+	settings settingsModel
 }
 
 // New builds the model for a loaded document; overrides are launch-time
@@ -211,6 +213,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	// A footer reaction lasts until the next key press. The handler that
 	// consumes this key may set a fresh one (notably `c` below).
 	m.flash = ""
+	if m.settings.open {
+		return m.handleSettingsKey(msg)
+	}
 	if cmd, handled := m.handleGlobalKey(msg); handled {
 		return cmd, true
 	}
@@ -226,6 +231,13 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "q", "ctrl+c":
 		m.shutdownInline()
 		return tea.Quit, true
+
+	case ",":
+		if m.out == nil {
+			return nil, true
+		}
+		m.openSettings()
+		return nil, true
 
 	case "r":
 		if m.inlineActive() || m.blockSel < 0 {
@@ -453,14 +465,16 @@ func (m *Model) relayout() {
 		m.sel.clear()
 	}
 
-	m.outline.visible = w >= minSidebarWidth
+	// The settings panel lives in the sidebar slot, so keep that slot when
+	// it is open even on terminals narrower than the usual threshold.
+	m.outline.visible = m.settings.open || w >= minSidebarWidth
 	sidebarW := 0
 	if m.outline.visible {
 		sidebarW = sidebarCols
 	}
 	contentW := w
 	if m.outline.visible {
-		contentW = w - sidebarW - gutterWidth - railWidth - rightMargin
+		contentW = w - sidebarW - gutterWidth - railWidth
 	}
 	contentW = max(minContentWidth, contentW)
 
@@ -468,8 +482,7 @@ func (m *Model) relayout() {
 	bodyH := max(1, h-footerRows)
 	m.paneHeight = bodyH
 	m.blankRow = " "
-	m.gutterRow = strings.Repeat(" ", gutterWidth-1) + sideBorderStyle.Render("│")
-	m.sep = sepStyle.Render(strings.Repeat("─", max(1, w)))
+	m.gutterRow = strings.Repeat(" ", gutterWidth)
 
 	m.content.Width = contentW
 	// The text area carries 1 padding row at its top and bottom — the
@@ -664,9 +677,10 @@ func lastAtOrBefore(values []int, off int) int {
 	return idx
 }
 
-// View renders the full screen: blank row, body, hairline, footer. The
-// finished frame is painted with the theme's canvas so no cell falls back
-// to the terminal's own background.
+// View renders the full screen: the reading panes on the left and a
+// full-height sidebar on the right that carries the file path in its footer.
+// The finished frame is painted with the theme's canvas so no cell falls
+// back to the terminal's own background.
 func (m Model) View() string {
 	if !m.laidOut {
 		return m.paintCanvas("Loading…")
@@ -674,17 +688,12 @@ func (m Model) View() string {
 	if m.width < minViewWidth || m.height < minViewHeight {
 		return m.paintCanvas(m.content.View())
 	}
-	var sb strings.Builder
-	// The viewer floats the panes with a blank row above, then a hairline
-	// and footer: context-aware shortcuts on the left, file path on the
-	// right.
-	sb.WriteByte('\n')
-	sb.WriteString(m.bodyView())
-	sb.WriteByte('\n')
-	sb.WriteString(m.sepView())
-	sb.WriteByte('\n')
-	sb.WriteString(m.footerView())
-	return m.paintCanvas(sb.String())
+	left := m.leftPaneView()
+	if !m.outline.visible {
+		return m.paintCanvas(left)
+	}
+	return m.paintCanvas(lipgloss.JoinHorizontal(lipgloss.Top,
+		left, m.rightPaneView()))
 }
 
 // paintCanvas applies the active theme's background to a finished frame.
@@ -696,18 +705,108 @@ func (m Model) paintCanvas(view string) string {
 	return render.PaintCanvas(view, m.width, m.theme)
 }
 
-// footerView is the bottom line: shortcuts for the current context on the
-// left, the runbook's file path on the right.
-func (m Model) footerView() string {
-	left := m.keyHints()
-	if m.flash != "" {
-		left = infoStyle.Render(m.flash)
+// leftPaneView is the reading area plus its footer rows. Without a sidebar
+// the file path stays on the right of the footer; with one, the path moves
+// into the sidebar's own footer.
+func (m Model) leftPaneView() string {
+	width := m.width
+	var body string
+	if m.outline.visible {
+		width = railWidth + m.content.Width + gutterWidth
+		gutter := make([]string, m.paneHeight)
+		for i := range gutter {
+			gutter[i] = m.gutterRow
+		}
+		body = lipgloss.JoinHorizontal(lipgloss.Top,
+			m.railView(), m.paddedContent(), strings.Join(gutter, "\n"))
+	} else {
+		body = m.paddedContent()
 	}
-	return composeLeftRight(left, infoStyle.Render(m.doc.Path), m.width)
+
+	// While settings are open their hints live in the sidebar footer, so
+	// the left band stays empty unless there is a reaction to show.
+	hints := ""
+	if !m.settings.open {
+		hints = m.keyHints()
+	}
+	if m.flash != "" {
+		hints = m.flash
+	}
+	text := "  " + hints
+	if !m.outline.visible {
+		text = composeLeftRight(text, m.doc.Path, width)
+	} else {
+		text = padRow(text, width)
+	}
+
+	// The footer band sits a few shades above the sidebar's raised shade.
+	// Its foreground is chosen by measured contrast: TextMuted is too dim
+	// against the derived surface in several themes.
+	footerBg := theme.Lift(m.theme.BackgroundElement, 0.12)
+	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(footerForeground(m.theme, footerBg))).
+		Background(lipgloss.Color(footerBg))
+	blank := footerStyle.Render(strings.Repeat(" ", width))
+	rows := strings.Split(body, "\n")
+	return strings.Join(append(rows,
+		blank,
+		footerStyle.Render(text),
+		blank,
+	), "\n")
 }
 
-// keyHints reports only the keys relevant to the current context.
+// rightPaneView is the sidebar. The file path sits left-aligned in its
+// footer band; settings replace it with their own hints.
+func (m Model) rightPaneView() string {
+	if m.settings.open {
+		hints := m.settingsFooterText()
+		band := theme.Lift(m.theme.BackgroundPanel, 0.10)
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(footerForeground(m.theme, band))).
+			Background(lipgloss.Color(band))
+		blank := style.Width(m.outline.width).Render("")
+		text := style.Render(padRow("  "+hints, m.outline.width))
+		return strings.Join(append(strings.Split(m.settingsView(m.paneHeight), "\n"),
+			blank, text, blank), "\n")
+	}
+
+	rows := strings.Split(m.outlineView(), "\n")
+	pathStyle := rowMutedStyle
+	if m.focus == focusOutline {
+		pathStyle = rowStyle
+	}
+	path := "  " + ansi.Truncate(m.doc.Path, max(1, m.outline.width-3), "…")
+	blank := pathStyle.Width(m.outline.width).Render("")
+	return strings.Join(append(rows,
+		blank,
+		pathStyle.Render(padRow(path, m.outline.width)),
+		blank,
+	), "\n")
+}
+
+// footerForeground picks the brightest/most readable theme text token for a
+// derived footer surface.
+func footerForeground(th theme.Theme, surface theme.Color) theme.Color {
+	return theme.ReadableOn(surface, th.Bright, th.Text, th.Soft, th.TextMuted)
+}
+
+// padRow pads a styled row to a visible width without disturbing its colors.
+func padRow(s string, width int) string {
+	if w := ansi.StringWidth(s); w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return ansi.Truncate(s, width, "…")
+}
+
+// keyHints reports only the keys relevant to the current context, as plain
+// text: the footer paints the whole band with one style.
 func (m Model) keyHints() string {
+	if m.settings.open {
+		if m.settings.page == settingsThemePage {
+			return "↑↓ preview · enter save · esc cancel"
+		}
+		return "enter open · esc close"
+	}
 	var hints []string
 	switch {
 	case m.inlineActive():
@@ -722,32 +821,7 @@ func (m Model) keyHints() string {
 	if m.focusedHasURL() {
 		hints = append(hints, "u url")
 	}
-	return infoStyle.Render(strings.Join(hints, " · "))
-}
-
-func (m Model) bodyView() string {
-	if m.out == nil {
-		return ""
-	}
-	content := m.content.View()
-	if !m.outline.visible {
-		return content
-	}
-	gutter := make([]string, m.paneHeight)
-	margin := make([]string, m.paneHeight)
-	for i := range gutter {
-		// The sidebar's left border line is always primary; focus is
-		// expressed by the strip's background lift.
-		gutter[i] = m.gutterRow
-		margin[i] = m.blankRow
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top,
-		m.railView(),
-		m.paddedContent(),
-		strings.Join(gutter, "\n"),
-		m.outlineView(),
-		strings.Join(margin, "\n"),
-	)
+	return strings.Join(hints, " · ")
 }
 
 // paddedContent wraps the viewport with the pane's top and bottom padding
@@ -914,10 +988,6 @@ func (m Model) displayLine(line int) int {
 
 func (m Model) outlineView() string {
 	return m.outline.view(m.paneHeight, m.focus == focusOutline)
-}
-
-func (m Model) sepView() string {
-	return m.sep
 }
 
 // composeLeftRight joins a left and right segment on one row, truncating the

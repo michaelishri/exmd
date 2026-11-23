@@ -30,7 +30,7 @@ func loadSource(t *testing.T, src string) *doc.Document {
 }
 
 // TestAcceptanceThemes runs the full render + paint pipeline over documents
-// that exercise each content type, at several widths, for both themes. It
+// that exercise each content type, at several widths, for every theme. It
 // checks the properties the reader relies on rather than exact snapshots:
 // full-width painted cells, no terminal-indexed colors, and no escapes at
 // all in notty mode.
@@ -45,8 +45,12 @@ func TestAcceptanceThemes(t *testing.T) {
 
 	for name, src := range sources {
 		d := loadSource(t, src)
-		for _, width := range []int{40, 80, 120} {
-			for _, th := range []theme.Theme{theme.Dark, theme.Notty} {
+		for _, themeName := range theme.Names() {
+			th, err := theme.Resolve(themeName, true)
+			if err != nil {
+				t.Fatalf("resolve %s: %v", themeName, err)
+			}
+			for _, width := range []int{40, 80, 120} {
 				t.Run(name+"/"+th.Name+"/"+strconv.Itoa(width), func(t *testing.T) {
 					out := Render(d, width, th)
 					painted := PaintCanvas(strings.Join(out.Lines, "\n"), width, th)

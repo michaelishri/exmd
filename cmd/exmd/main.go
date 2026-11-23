@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/render"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -22,20 +23,25 @@ const version = "0.3.0"
 const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
-  exmd DOC [--set K=V] [--theme auto|dark|notty]
-                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops)
+  exmd DOC [--set K=V] [--theme NAME]
+                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops, , settings)
   exmd check DOC                 validate; report all diagnostics at once
   exmd list DOC                  enumerate executable blocks
   exmd globals DOC [--set K=V]   show the document's global variables
-  exmd print DOC [--width N] [--theme auto|dark|notty]
+  exmd print DOC [--width N] [--theme NAME]
                                     render the document to the terminal
   exmd version                   print the version
 
 Launch-time overrides (--set KEY=VALUE) may target any global declared in the
 frontmatter; the frontmatter is the complete contract of the document's
 variable surface (SPEC.md §2.2). --theme selects the palette for the TUI and
-print: auto (the default) is dark when the terminal supports color and notty
-otherwise; dark and notty force their palette.
+print. auto (the default) is dark when the terminal supports color and notty
+otherwise. Other palettes:
+  catppuccin-mocha, catppuccin-latte, one-dark, one-light, gruvbox-dark,
+  gruvbox-light, dracula, tokyo-night, github-dark, github-light,
+  solarized-dark, solarized-light, nord, nord-light, rose-pine,
+  rose-pine-dawn, everforest-light, dark, notty
+Aliases: catppuccin, atom, atom-light, tokyonight, rosepine.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
@@ -44,15 +50,19 @@ Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2
 var errHelp = errors.New("help")
 
 // OpenCode-adjacent minimal styling: color only where it carries meaning.
-// The colors come from the theme, never from the terminal's ANSI palette.
+// The colors come from the selected theme, never from the terminal's ANSI
+// palette.
 var (
-	styleErr  = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().Error))
-	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().Warning))
-	styleDim  = lipgloss.NewStyle().Foreground(lipgloss.Color(diagnosticTheme().TextMuted))
+	diagnosticPalette = diagnosticTheme()
+	styleErr          lipgloss.Style
+	styleWarn         lipgloss.Style
+	styleDim          lipgloss.Style
 )
 
-// diagnosticTheme supplies the diagnostics palette. On a terminal without
-// color support every token is empty, so styles render as plain text.
+func init() { setDiagnosticTheme(diagnosticPalette) }
+
+// diagnosticTheme supplies the default diagnostics palette. On a terminal
+// without color support every token is empty, so styles render as plain text.
 func diagnosticTheme() theme.Theme {
 	if !colorSupported() {
 		return theme.Notty
@@ -60,10 +70,19 @@ func diagnosticTheme() theme.Theme {
 	return theme.Dark
 }
 
+// setDiagnosticTheme points diagnostics at the palette selected for this
+// invocation, so headless output agrees with the TUI and print.
+func setDiagnosticTheme(th theme.Theme) {
+	diagnosticPalette = th
+	styleErr = lipgloss.NewStyle().Foreground(lipgloss.Color(th.Error))
+	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color(th.Warning))
+	styleDim = lipgloss.NewStyle().Foreground(lipgloss.Color(th.TextMuted))
+}
+
 // printThemeLine writes a line with the same canvas rule as the TUI and
 // print, so headless output never falls back to the terminal's palette.
 func printThemeLine(s string) {
-	fmt.Println(render.PaintCanvas(s, lipgloss.Width(s), diagnosticTheme()))
+	fmt.Println(render.PaintCanvas(s, lipgloss.Width(s), diagnosticPalette))
 }
 
 func main() {
@@ -130,7 +149,31 @@ func resolveTheme(name string) (theme.Theme, error) {
 	return theme.Resolve(name, colorSupported())
 }
 
+// resolveInvocationTheme applies theme precedence: an explicit --theme flag
+// wins, then the saved preference, then the default. A bad saved name is
+// reported and ignored rather than failing the command.
+func resolveInvocationTheme(flagName string) (theme.Theme, error) {
+	if flagName != "" {
+		return resolveTheme(flagName)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
+	}
+	if cfg.Theme != "" {
+		if th, err := theme.Resolve(cfg.Theme, colorSupported()); err == nil {
+			return th, nil
+		} else {
+			fmt.Fprintf(os.Stderr, "exmd: ignoring saved theme %q: %v\n", cfg.Theme, err)
+		}
+	}
+	return resolveTheme("")
+}
+
 func run(args []string) int {
+	// Verbs without --theme use the default diagnostics palette. Commands
+	// that accept --theme override it after parsing their flags.
+	setDiagnosticTheme(diagnosticTheme())
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, usage)
 		return 2

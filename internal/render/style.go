@@ -132,27 +132,97 @@ func styleFor(th theme.Theme) gansi.StyleConfig {
 	c.ImageText.Color = strPtr(string(th.TextMuted))
 	c.HorizontalRule.Color = strPtr(string(th.Rule))
 
-	c.Code.StylePrimitive.Color = strPtr(string(th.Text))
+	codeText := strPtr(string(theme.AdjustForSurface(th.Text, th.ExecPanel, 4.5)))
+	c.Code.StylePrimitive.Color = codeText
 	c.Code.StylePrimitive.BackgroundColor = strPtr(string(th.CodePanel))
-	c.CodeBlock.StylePrimitive.Color = strPtr(string(th.Text))
+	c.CodeBlock.StylePrimitive.Color = codeText
 	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(string(th.CodePanel))
 	c.CodeBlock.Chroma = chromaFor(th)
 
 	return c
 }
 
-// chromaFor builds the syntax-token palette from the theme. Nothing is left
-// to glamour's built-in dark palette, which would otherwise reintroduce
-// colors that ignore the selected theme.
+// chromaFor builds the syntax-token palette from the theme. A theme with its
+// own Syntax keeps its code colors; otherwise the legacy role-derived mapping
+// is used so the original dark palette is unchanged. Nothing is left to
+// glamour's built-in palettes.
 func chromaFor(th theme.Theme) *gansi.Chroma {
-	text := strPtr(string(th.Text))
-	bright := strPtr(string(th.Bright))
-	soft := strPtr(string(th.Soft))
-	muted := strPtr(string(th.TextMuted))
-	accent := strPtr(string(th.Accent))
-	success := strPtr(string(th.Success))
-	warning := strPtr(string(th.Warning))
-	err := strPtr(string(th.Error))
+	if th.Syntax == (theme.Syntax{}) {
+		return legacyChroma(th)
+	}
+	s := theme.AdjustSyntax(th)
+	adj := func(c theme.Color) theme.Color {
+		return theme.AdjustForSurface(c, th.ExecPanel, 4.5)
+	}
+	text := strPtr(string(adj(th.Text)))
+	bright := strPtr(string(adj(th.Bright)))
+	soft := strPtr(string(adj(th.Soft)))
+	muted := strPtr(string(adj(th.TextMuted)))
+	success := strPtr(string(adj(th.Success)))
+	err := strPtr(string(adj(th.Error)))
+	accentC, warningC, successC, softC, mutedC := adj(th.Accent), adj(th.Warning), adj(th.Success), adj(th.Soft), adj(th.TextMuted)
+
+	comment := colorOr(s.Comment, mutedC)
+	keyword := colorOr(s.Keyword, accentC)
+	str := colorOr(s.String, successC)
+	fn := colorOr(s.Function, successC)
+	number := colorOr(s.Number, accentC)
+	typ := colorOr(s.Type, softC)
+	op := colorOr(s.Operator, warningC)
+	punct := colorOr(s.Punctuation, softC)
+	constant := colorOr(s.Constant, warningC)
+
+	return &gansi.Chroma{
+		Text:                gansi.StylePrimitive{Color: text},
+		Error:               gansi.StylePrimitive{Color: err},
+		Comment:             gansi.StylePrimitive{Color: colorPtr(comment)},
+		CommentPreproc:      gansi.StylePrimitive{Color: colorPtr(constant)},
+		Keyword:             gansi.StylePrimitive{Color: colorPtr(keyword)},
+		KeywordReserved:     gansi.StylePrimitive{Color: colorPtr(keyword)},
+		KeywordNamespace:    gansi.StylePrimitive{Color: colorPtr(keyword)},
+		KeywordType:         gansi.StylePrimitive{Color: colorPtr(typ)},
+		Operator:            gansi.StylePrimitive{Color: colorPtr(op)},
+		Punctuation:         gansi.StylePrimitive{Color: colorPtr(punct)},
+		Name:                gansi.StylePrimitive{Color: text},
+		NameBuiltin:         gansi.StylePrimitive{Color: colorPtr(typ)},
+		NameTag:             gansi.StylePrimitive{Color: colorPtr(typ)},
+		NameAttribute:       gansi.StylePrimitive{Color: colorPtr(constant)},
+		NameClass:           gansi.StylePrimitive{Color: colorPtr(typ)},
+		NameConstant:        gansi.StylePrimitive{Color: colorPtr(constant)},
+		NameDecorator:       gansi.StylePrimitive{Color: colorPtr(constant)},
+		NameException:       gansi.StylePrimitive{Color: err},
+		NameFunction:        gansi.StylePrimitive{Color: colorPtr(fn)},
+		NameOther:           gansi.StylePrimitive{Color: text},
+		Literal:             gansi.StylePrimitive{Color: colorPtr(str)},
+		LiteralNumber:       gansi.StylePrimitive{Color: colorPtr(number)},
+		LiteralDate:         gansi.StylePrimitive{Color: colorPtr(number)},
+		LiteralString:       gansi.StylePrimitive{Color: colorPtr(str)},
+		LiteralStringEscape: gansi.StylePrimitive{Color: colorPtr(str)},
+		GenericDeleted:      gansi.StylePrimitive{Color: err},
+		GenericEmph:         gansi.StylePrimitive{Color: soft},
+		GenericInserted:     gansi.StylePrimitive{Color: success},
+		GenericStrong:       gansi.StylePrimitive{Color: bright},
+		GenericSubheading:   gansi.StylePrimitive{Color: muted},
+		// The surface is painted by paintExecLines / PaintCanvas; leaving
+		// chroma's background unset keeps it from painting over that work.
+		Background: gansi.StylePrimitive{},
+	}
+}
+
+// legacyChroma is the original role-derived mapping, kept for themes without
+// a dedicated syntax palette (dark and notty).
+func legacyChroma(th theme.Theme) *gansi.Chroma {
+	adj := func(c theme.Color) string {
+		return string(theme.AdjustForSurface(c, th.ExecPanel, 4.5))
+	}
+	text := strPtr(adj(th.Text))
+	bright := strPtr(adj(th.Bright))
+	soft := strPtr(adj(th.Soft))
+	muted := strPtr(adj(th.TextMuted))
+	accent := strPtr(adj(th.Accent))
+	success := strPtr(adj(th.Success))
+	warning := strPtr(adj(th.Warning))
+	err := strPtr(adj(th.Error))
 
 	return &gansi.Chroma{
 		Text:                gansi.StylePrimitive{Color: text},
@@ -185,11 +255,19 @@ func chromaFor(th theme.Theme) *gansi.Chroma {
 		GenericInserted:     gansi.StylePrimitive{Color: success},
 		GenericStrong:       gansi.StylePrimitive{Color: bright},
 		GenericSubheading:   gansi.StylePrimitive{Color: muted},
-		// The surface is painted by paintExecLines / PaintCanvas; leaving
-		// chroma's background unset keeps it from painting over that work.
-		Background: gansi.StylePrimitive{},
+		Background:          gansi.StylePrimitive{},
 	}
 }
+
+// colorOr picks the first non-empty color.
+func colorOr(preferred, fallback theme.Color) theme.Color {
+	if preferred != "" {
+		return preferred
+	}
+	return fallback
+}
+
+func colorPtr(c theme.Color) *string { return strPtr(string(c)) }
 
 // execStyleFor is styleFor with the executable shade on the code block's
 // primitive (the margin cells); the code text rows are painted by

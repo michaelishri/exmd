@@ -1,6 +1,7 @@
 package render
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -112,7 +113,7 @@ func luminance(t *testing.T, c theme.Color) float64 {
 		if s <= 0.03928 {
 			ch[i] = s / 12.92
 		} else {
-			ch[i] = ((s + 0.055) / 1.055) * 2.4
+			ch[i] = math.Pow((s+0.055)/1.055, 2.4)
 		}
 	}
 	return 0.2126*ch[0] + 0.7152*ch[1] + 0.0722*ch[2]

@@ -17,7 +17,6 @@ var (
 	selRowStyle lipgloss.Style
 
 	emptyStateStyle lipgloss.Style
-	sepStyle        lipgloss.Style
 	infoStyle       lipgloss.Style
 
 	// sideTitleStyle renders the sidebar's title row — the document's
@@ -48,11 +47,8 @@ var (
 	railDoneActiveStyle lipgloss.Style
 	railFailActiveStyle lipgloss.Style
 
-	// sideBorderStyle draws the sidebar's left border line in the same
-	// muted chrome color as the separator under an executable code block.
-	sideBorderStyle lipgloss.Style
-
-	// execEdgeStyle is that separator: muted foreground on the exec shade.
+	// execEdgeStyle is the separator under an executable code block: muted
+	// foreground on the exec shade.
 	execEdgeStyle lipgloss.Style
 )
 
@@ -66,9 +62,11 @@ func SetTheme(th theme.Theme) {
 }
 
 func buildStyles() {
+	// Focused sidebar rows sit on the raised shade; the resting strip uses
+	// the darker panel shade so it is visible for its full height.
 	rowStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted)).
-		Background(lipgloss.Color(t.BackgroundPanel))
+		Background(lipgloss.Color(t.BackgroundElement))
 
 	// The selected row inverts into the primary (state) color: the
 	// background carries the selection, and bold keeps it visible in the
@@ -80,38 +78,36 @@ func buildStyles() {
 
 	emptyStateStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted)).
-		Background(lipgloss.Color(t.BackgroundPanel))
-
-	// The hairline above the footer shares the Separator tone with the
-	// sidebar border and exec output separator.
-	sepStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Separator))
+		Background(lipgloss.Color(t.BackgroundElement))
 
 	infoStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.TextMuted))
 
 	sideTitleStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).
-		Background(lipgloss.Color(t.BackgroundPanel)).
+		Background(lipgloss.Color(t.BackgroundElement)).
 		Bold(true)
 
 	rowHiStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).
-		Background(lipgloss.Color(t.BackgroundPanel))
+		Background(lipgloss.Color(t.BackgroundElement))
 
-	// The sidebar's resting shades: no background at all — the strip
-	// blends into the page exactly like the text area — with the same
-	// text colors as the focused surfaces. Focus lifts the strip onto the
-	// panel background.
+	// The sidebar's resting strip is painted on the panel shade for its
+	// full height. Focus lifts it to the raised element shade; text colors
+	// stay the same in both states.
 	rowMutedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
+		Foreground(lipgloss.Color(t.TextMuted)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 	rowHiMutedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Text))
+		Foreground(lipgloss.Color(t.Text)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 	sideTitleMutedStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Text)).
+		Background(lipgloss.Color(t.BackgroundPanel)).
 		Bold(true)
 	emptyStateMutedStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.TextMuted))
+		Foreground(lipgloss.Color(t.TextMuted)).
+		Background(lipgloss.Color(t.BackgroundPanel))
 
 	gutterBarStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Primary))
@@ -130,11 +126,8 @@ func buildStyles() {
 	railFailActiveStyle = railFailStyle.
 		Foreground(lipgloss.Color(t.ErrorBright)).Bold(true)
 
-	// The sidebar border and the exec block's output separator share the
-	// same bright chrome tone.
-	sideBorderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(t.Separator))
-
+	// The exec block's output separator uses the same chrome tone as the
+	// footer hairline.
 	execEdgeStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Separator)).
 		Background(lipgloss.Color(t.ExecPanel))

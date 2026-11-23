@@ -39,9 +39,9 @@ func (s textSelection) ordered() (selPoint, selPoint, bool) {
 }
 
 // contentOrigin returns the terminal cell where the content viewport starts.
-// Bubble Tea reports mouse coordinates zero-based; View adds a leading blank
-// row, the wide layout adds a rail column and a pane padding row, and the
-// narrow layout renders the bare viewport.
+// Bubble Tea reports mouse coordinates zero-based; the wide layout adds a
+// rail column and a pane padding row, while the narrow layout renders the
+// bare viewport.
 func (m Model) contentOrigin() (int, int) {
 	switch {
 	case m.width < minViewWidth || m.height < minViewHeight:
@@ -49,7 +49,7 @@ func (m Model) contentOrigin() (int, int) {
 	case !m.outline.visible:
 		return 0, 1
 	default:
-		return railWidth, 2
+		return railWidth, 1
 	}
 }
 

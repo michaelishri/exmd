@@ -15,7 +15,7 @@ func TestContentOrigin(t *testing.T) {
 		w, h         int
 		wantX, wantY int
 	}{
-		{"wide with sidebar", 120, 40, railWidth, 2},
+		{"wide with sidebar", 120, 40, railWidth, 1},
 		{"sidebar hidden", 80, 30, 0, 1},
 		{"narrow", 15, 10, 0, 0},
 	} {

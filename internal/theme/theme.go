@@ -3,17 +3,23 @@
 // shades, muted chrome, and color reserved for state.
 package theme
 
-import (
-	"fmt"
-	"strings"
-)
-
 // Color is a theme color token.
 type Color string
+
+// Syntax holds the code-token colors of a theme. A zero value means the
+// theme has no dedicated syntax palette; the renderer then derives those
+// colors from the general roles below.
+type Syntax struct {
+	Comment, Keyword, String, Function, Number Color
+	Type, Operator, Punctuation, Constant      Color
+}
 
 // Theme is a set of named color tokens.
 type Theme struct {
 	Name string
+
+	// Syntax carries the theme's own code colors when it has them.
+	Syntax Syntax
 
 	// Background shades, darkest to lightest. The canvas itself is the
 	// terminal's own background; panels and elements sit one or two shades
@@ -95,24 +101,4 @@ var Dark = Theme{
 // empty, so styles render as plain text.
 var Notty = Theme{
 	Name: "notty",
-}
-
-// Resolve maps a --theme flag value to a Theme. "auto" (the default, and the
-// empty string) picks Dark when the terminal supports color and Notty
-// otherwise; "dark" and "notty" force their tokens regardless. Matching is
-// case-insensitive.
-func Resolve(name string, colorSupported bool) (Theme, error) {
-	switch strings.ToLower(name) {
-	case "", "auto":
-		if colorSupported {
-			return Dark, nil
-		}
-		return Notty, nil
-	case "dark":
-		return Dark, nil
-	case "notty":
-		return Notty, nil
-	default:
-		return Theme{}, fmt.Errorf("unknown theme %q (valid: auto, dark, notty)", name)
-	}
 }

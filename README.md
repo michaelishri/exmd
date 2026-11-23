@@ -62,18 +62,41 @@ they never execute blocks:
 
 - `exmd check DOC` — validate the document: frontmatter, fence grammar, adapters
   and interpreters, script-reference files; reports all diagnostics at once
-- `exmd print DOC [--width N] [--theme auto|dark|notty]` — render the
-  document to the terminal
+- `exmd print DOC [--width N] [--theme NAME]` — render the document to the
+  terminal
 - `exmd list DOC` — enumerate executable blocks: index, language, kind (embedded /
   `@script`), line number, referenced path
 - `exmd globals DOC [--set KEY=VALUE]...` — show the document's parameter surface:
   declared globals, defaults, overrides, and what starts present vs absent
 
-Themes are owned by the tool, not mixed with the terminal palette. `auto`
-(the default) and `dark` use exmd's dark palette and paint the whole canvas,
-so the reader looks the same in a light terminal and a dark one.
-`--theme notty` emits no color at all, leaving the terminal's own palette in
-charge.
+Themes are owned by the tool, not mixed with the terminal palette. Every
+palette paints the whole canvas, so the reader looks the same in a light
+terminal and a dark one. `auto` (the default) and `dark` select the original
+dark palette; `--theme notty` emits no color at all, leaving the terminal's
+own palette in charge.
+
+| Dark themes | Light themes |
+|---|---|
+| `catppuccin-mocha` (alias `catppuccin`) | `catppuccin-latte` |
+| `one-dark` (alias `atom`) | `one-light` (alias `atom-light`) |
+| `gruvbox-dark` | `gruvbox-light` |
+| `dracula` | `github-light` |
+| `tokyo-night` (alias `tokyonight`) | `solarized-light` |
+| `github-dark` | `nord-light` |
+| `solarized-dark` | `rose-pine-dawn` |
+| `nord` | `everforest-light` |
+| `rose-pine` (alias `rosepine`) | |
+
+### Settings
+
+Press **`,`** in the TUI to open the settings panel in the sidebar. Select
+**Theme** to scroll the full palette list; the whole reader repaints as you
+move the cursor. **Enter** saves the highlighted theme, **Esc** cancels and
+restores the previous one.
+
+The choice is saved to `$XDG_CONFIG_HOME/exmd/config.yaml` (or
+`~/.config/exmd/config.yaml`) as `theme: NAME`. An explicit `--theme` flag
+always overrides the saved value.
 
 In the TUI, highlight a heading in the outline and press **`\``** to select the
 code blocks in its section; **`r`** runs the highlighted block *in place*, with
