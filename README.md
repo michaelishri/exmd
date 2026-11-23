@@ -85,7 +85,8 @@ own palette in charge.
 | `github-dark` | `nord-light` |
 | `solarized-dark` | `rose-pine-dawn` |
 | `nord` | `everforest-light` |
-| `rose-pine` (alias `rosepine`) | |
+| `rose-pine` (alias `rosepine`) | `ayu-light` |
+| `ayu-dark` | |
 
 ### Settings
 

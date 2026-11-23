@@ -539,6 +539,68 @@ var (
 			Operator: "#6b7d72", Punctuation: "#5c6a72", Constant: "#b89038",
 		},
 	}
+
+	// Ayu Dark, from the official ayu-theme/ayu-colors palette.
+	AyuDark = Theme{
+		Name:              "ayu-dark",
+		Background:        "#0d1017",
+		BackgroundPanel:   "#10141c",
+		BackgroundElement: "#161a24",
+		Border:            "#1b1f29",
+		Separator:         "#2d3442",
+		Text:              "#fcf8ec",
+		TextMuted:         "#b9c2d9",
+		Bright:            "#ffffff",
+		Soft:              "#e6e5df",
+		Accent:            "#e6b450",
+		Rule:              "#2d3442",
+		CodePanel:         "#10141c",
+		ExecPanel:         "#161a24",
+		Primary:           "#e6b450",
+		Success:           "#aad94c",
+		Error:             "#d95757",
+		Warning:           "#ffb454",
+		Running:           "#ff8f40",
+		SuccessBright:     "#c4f06f",
+		ErrorBright:       "#f08a8a",
+		RunningBright:     "#ffb37a",
+		Syntax: Syntax{
+			Comment: "#5a6673", Keyword: "#ff8f40", String: "#aad94c",
+			Function: "#ffb454", Number: "#d2a6ff", Type: "#59c2ff",
+			Operator: "#f29668", Punctuation: "#fcf8ec", Constant: "#d2a6ff",
+		},
+	}
+
+	// Ayu Light, from the official ayu-theme/ayu-colors palette.
+	AyuLight = Theme{
+		Name:              "ayu-light",
+		Background:        "#fcfcfc",
+		BackgroundPanel:   "#f8f9fa",
+		BackgroundElement: "#ebeef0",
+		Border:            "#d6dde4",
+		Separator:         "#b9c2cb",
+		Text:              "#020a12",
+		TextMuted:         "#58687a",
+		Bright:            "#021a3c",
+		Soft:              "#414c5c",
+		Accent:            "#b36b00",
+		Rule:              "#d6dde4",
+		CodePanel:         "#f8f9fa",
+		ExecPanel:         "#ebeef0",
+		Primary:           "#f29718",
+		Success:           "#86b300",
+		Error:             "#e65050",
+		Warning:           "#eba400",
+		Running:           "#fa8532",
+		SuccessBright:     "#6b9000",
+		ErrorBright:       "#c43c3c",
+		RunningBright:     "#c4661f",
+		Syntax: Syntax{
+			Comment: "#adaeb1", Keyword: "#fa8532", String: "#86b300",
+			Function: "#eba400", Number: "#a37acc", Type: "#22a4e6",
+			Operator: "#f2a191", Punctuation: "#020a12", Constant: "#a37acc",
+		},
+	}
 )
 
 var registry = map[string]Theme{
@@ -561,6 +623,8 @@ var registry = map[string]Theme{
 	"rose-pine":        RosePine,
 	"rose-pine-dawn":   RosePineDawn,
 	"everforest-light": EverforestLight,
+	"ayu-dark":         AyuDark,
+	"ayu-light":        AyuLight,
 }
 
 var aliases = map[string]string{

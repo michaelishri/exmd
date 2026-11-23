@@ -40,7 +40,7 @@ otherwise. Other palettes:
   catppuccin-mocha, catppuccin-latte, one-dark, one-light, gruvbox-dark,
   gruvbox-light, dracula, tokyo-night, github-dark, github-light,
   solarized-dark, solarized-light, nord, nord-light, rose-pine,
-  rose-pine-dawn, everforest-light, dark, notty
+  rose-pine-dawn, everforest-light, ayu-dark, ayu-light, dark, notty
 Aliases: catppuccin, atom, atom-light, tokyonight, rosepine.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
