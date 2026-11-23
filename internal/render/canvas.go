@@ -87,15 +87,12 @@ func nextSetsBackground(line string, seqs [][]int, i int) bool {
 
 func isReset(seq string) bool {
 	params := paramsOf(seq)
-	if params == nil {
+	if len(params) == 0 {
 		return false
 	}
-	for _, p := range params {
-		if p == "" || p == "0" {
-			return true
-		}
-	}
-	return false
+	// Only a leading reset counts. A `0` later in a sequence is usually a
+	// zero color channel (e.g. 38;2;123;93;0), not a reset.
+	return params[0] == "" || params[0] == "0"
 }
 
 func setsBackground(seq string) bool {

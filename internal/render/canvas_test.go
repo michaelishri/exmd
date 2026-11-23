@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )
@@ -59,6 +60,43 @@ func TestPaintCanvasNottyIsPlain(t *testing.T) {
 	view := "one\ntwo\n"
 	if got := PaintCanvas(view, 80, theme.Notty); got != view {
 		t.Fatalf("notty view changed: %q", got)
+	}
+}
+
+// TestZeroChannelColorsAreNotResets checks that a token color with a zero
+// channel (for example #7b5d00) is not mistaken for an ANSI reset, which
+// would paint the canvas background behind that token.
+func TestZeroChannelColorsAreNotResets(t *testing.T) {
+	th, err := theme.Resolve("solarized-light", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := Render(loadDemo(t), 100, th)
+	view := PaintCanvas(strings.Join(out.Lines, "\n"), 100, th)
+	canvas := backgroundEscape(th.Background)
+
+	var code string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ansi.Strip(line)), "cd ") {
+			code = line
+			break
+		}
+	}
+	if code == "" {
+		t.Fatal("no code line found")
+	}
+
+	syntax := theme.AdjustSyntax(th)
+	for name, c := range map[string]theme.Color{
+		"Type": syntax.Type, "Keyword": syntax.Keyword, "Function": syntax.Function,
+	} {
+		if c == "" || !strings.Contains(string(c), "00") {
+			continue
+		}
+		fg := "\x1b[" + termenv.TrueColor.Color(string(c)).Sequence(false) + "m"
+		if strings.Contains(code, fg+canvas) {
+			t.Errorf("%s color %q was treated as a reset and painted with the canvas", name, c)
+		}
 	}
 }
 
