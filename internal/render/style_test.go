@@ -1,9 +1,10 @@
 package render
 
 import (
-	"reflect"
 	"testing"
 
+	"github.com/alecthomas/chroma/v2"
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	gansi "github.com/charmbracelet/glamour/ansi"
 
 	"github.com/michaelishri/exmd/internal/theme"
@@ -68,24 +69,23 @@ func TestStyleUsesOnlyThemeColors(t *testing.T) {
 			check("code", c.Code.StylePrimitive)
 			check("codeBlock", c.CodeBlock.StylePrimitive)
 
-			if c.CodeBlock.Chroma == nil {
-				t.Fatal("chroma palette is unset")
+			if c.CodeBlock.Theme == "" {
+				t.Fatal("chroma theme name is unset")
 			}
-			v := reflect.ValueOf(*c.CodeBlock.Chroma)
-			typ := v.Type()
-			for i := 0; i < v.NumField(); i++ {
-				p := v.Field(i).Interface().(gansi.StylePrimitive)
-				if typ.Field(i).Name == "Background" {
-					if p.BackgroundColor != nil || p.Color != nil {
-						t.Error("chroma background should be unpainted")
-					}
+			registered := chromastyles.Get(c.CodeBlock.Theme)
+			if registered == nil || registered.Name != c.CodeBlock.Theme {
+				t.Fatalf("chroma style %q is not registered", c.CodeBlock.Theme)
+			}
+			for _, token := range chromaTokens {
+				entry := registered.Get(token)
+				if !entry.Colour.IsSet() {
+					t.Errorf("chroma.%s has no theme color", token)
 					continue
 				}
-				if p.Color == nil {
-					t.Errorf("chroma.%s has no theme color", typ.Field(i).Name)
-					continue
+				colour := entry.Colour.String()
+				if !allowed[colour] {
+					t.Errorf("chroma.%s color %q is not a theme token", token, colour)
 				}
-				check("chroma."+typ.Field(i).Name, p)
 			}
 		})
 	}
@@ -97,15 +97,18 @@ func TestThemeSyntaxIsUsed(t *testing.T) {
 	th := theme.CatppuccinMocha
 	syntax := theme.AdjustSyntax(th)
 	c := styleFor(th)
-	if got := c.CodeBlock.Chroma.Keyword.Color; got == nil || *got != string(syntax.Keyword) {
-		t.Fatalf("chroma keyword = %v, want %q", got, syntax.Keyword)
+	registered := chromastyles.Get(c.CodeBlock.Theme)
+	if got := registered.Get(chroma.Keyword).Colour.String(); got != string(syntax.Keyword) {
+		t.Fatalf("chroma keyword = %q, want %q", got, syntax.Keyword)
 	}
-	if got := c.CodeBlock.Chroma.NameFunction.Color; got == nil || *got != string(syntax.Function) {
-		t.Fatalf("chroma function = %v, want %q", got, syntax.Function)
+	if got := registered.Get(chroma.NameFunction).Colour.String(); got != string(syntax.Function) {
+		t.Fatalf("chroma function = %q, want %q", got, syntax.Function)
 	}
+
 	want := theme.AdjustForSurface(theme.Dark.Accent, theme.Dark.ExecPanel, 4.5)
-	if got := styleFor(theme.Dark).CodeBlock.Chroma.Keyword.Color; got == nil ||
-		*got != string(want) {
-		t.Fatalf("legacy chroma keyword = %v, want %q", got, want)
+	darkStyle := styleFor(theme.Dark)
+	darkRegistered := chromastyles.Get(darkStyle.CodeBlock.Theme)
+	if got := darkRegistered.Get(chroma.Keyword).Colour.String(); got != string(want) {
+		t.Fatalf("legacy chroma keyword = %q, want %q", got, want)
 	}
 }

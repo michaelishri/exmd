@@ -137,7 +137,11 @@ func styleFor(th theme.Theme) gansi.StyleConfig {
 	c.Code.StylePrimitive.BackgroundColor = strPtr(string(th.CodePanel))
 	c.CodeBlock.StylePrimitive.Color = codeText
 	c.CodeBlock.StylePrimitive.BackgroundColor = strPtr(string(th.CodePanel))
-	c.CodeBlock.Chroma = chromaFor(th)
+	// Use a per-theme named style: glamour's built-in "charm" registry entry
+	// is written once and would otherwise pin every later render to the
+	// first theme used in this process.
+	c.CodeBlock.Chroma = nil
+	c.CodeBlock.Theme = registerChromaStyle(th, chromaFor(th))
 
 	return c
 }
