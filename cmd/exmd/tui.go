@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
+	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/session"
 	"github.com/michaelishri/exmd/internal/tui"
 )
 
@@ -57,15 +59,36 @@ func cmdTUI(args []string) int {
 		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
 		return 2
 	}
+	return launchTUI(res, sets.toMap(), themeName, nil)
+}
+
+// launchTUI is shared by fresh opens and resumes. A non-nil snapshot restores
+// the saved viewer state; the underlying exec.Session is always created fresh.
+func launchTUI(res *doc.Result, overrides map[string]string, themeName string, snap *session.Snapshot) int {
+	th, err := resolveInvocationTheme(themeName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
+		return 2
+	}
+	tui.SetTheme(th)
+	setDiagnosticTheme(th)
+
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Fprintf(os.Stderr, "exmd: the TUI needs an interactive terminal; try `exmd check %s`\n", positional[0])
+		fmt.Fprintf(os.Stderr, "exmd: the TUI needs an interactive terminal; try `exmd check %s`\n", res.Doc.Path)
 		return 2
 	}
 
-	p := tea.NewProgram(tui.New(res, sets.toMap()), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	var model tea.Model = tui.New(res, overrides)
+	if snap != nil {
+		model = tui.NewWithSnapshot(res, overrides, snap)
+	}
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
+	}
+	if snap == nil {
+		fmt.Printf("Session saved — resume with: exmd %s --resume\n", res.Doc.Path)
 	}
 	return 0
 }

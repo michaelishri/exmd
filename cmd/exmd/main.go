@@ -18,13 +18,16 @@ import (
 	"github.com/muesli/termenv"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
-  exmd DOC [--set K=V] [--theme NAME]
-                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops, , settings)
+  exmd DOC [--resume] [--set K=V] [--theme NAME]
+                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops, , settings);
+                                    --resume restores the last saved session for DOC
+  exmd --resume --list               list saved sessions
+  exmd DOC --resume --clear          discard a saved session
   exmd check DOC                 validate; report all diagnostics at once
   exmd list DOC                  enumerate executable blocks
   exmd globals DOC [--set K=V]   show the document's global variables
@@ -42,6 +45,11 @@ otherwise. Other palettes:
   solarized-dark, solarized-light, nord, nord-light, rose-pine,
   rose-pine-dawn, everforest-light, ayu-dark, ayu-light, dark, notty
 Aliases: catppuccin, atom, atom-light, tokyonight, rosepine.
+
+The TUI saves one session per document as you work. Pass --resume to restore its
+globals, block outputs, and selected block; nothing about the spec's state model
+changes (SPEC.md §9). A snapshot is invalidated when the document or a script it
+references is edited.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
@@ -170,6 +178,17 @@ func resolveInvocationTheme(flagName string) (theme.Theme, error) {
 	return resolveTheme("")
 }
 
+// hasResumeFlag reports whether --resume is present anywhere in args. Flags
+// may appear before or after the document, so dispatch cannot look at args[0].
+func hasResumeFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--resume" || a == "-resume" || strings.HasPrefix(a, "--resume=") || strings.HasPrefix(a, "-resume=") {
+			return true
+		}
+	}
+	return false
+}
+
 func run(args []string) int {
 	// Verbs without --theme use the default diagnostics palette. Commands
 	// that accept --theme override it after parsing their flags.
@@ -177,6 +196,9 @@ func run(args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, usage)
 		return 2
+	}
+	if hasResumeFlag(args) {
+		return cmdResume(args)
 	}
 	switch args[0] {
 	case "check":

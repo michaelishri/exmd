@@ -7,8 +7,10 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +21,7 @@ import (
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/exec"
 	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/session"
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
@@ -71,6 +74,17 @@ type Model struct {
 	// runs (SPEC.md §4.3): one session for all blocks in this document.
 	inlineSession *exec.Session
 
+	// snap is the snapshot continuously saved for this document. When a
+	// session was resumed, restoredState seeds the lazily created
+	// inlineSession with the saved globals and block cursor.
+	snap          *session.Snapshot
+	restoredState exec.SessionState
+	resuming      bool
+	lastSave      time.Time
+	// engineBusy is true while a run goroutine owns inlineSession. State is
+	// only read from the snapshot taken before the run and after it ends.
+	engineBusy bool
+
 	// paneHeight is the height of the body panes (rail, gutter, sidebar,
 	// content block including its padding rows); the viewport itself shows
 	// paneHeight minus the content's two padding rows.
@@ -90,6 +104,13 @@ type Model struct {
 // New builds the model for a loaded document; overrides are launch-time
 // values for declared globals (SPEC.md §2.2).
 func New(res *doc.Result, overrides map[string]string) Model {
+	return NewWithSnapshot(res, overrides, nil)
+}
+
+// NewWithSnapshot builds the model, optionally restoring a saved session.
+// Execution state, per-block output, and the selected block come back; the
+// live process, host environment, and view position do not.
+func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session.Snapshot) Model {
 	m := Model{
 		doc:       res.Doc,
 		content:   viewport.New(0, 0),
@@ -101,6 +122,42 @@ func New(res *doc.Result, overrides map[string]string) Model {
 		inline:    map[int]*inlineState{},
 	}
 	m.content.MouseWheelEnabled = true
+	if s, err := session.New(res.Doc, overrides); err == nil {
+		m.snap = s
+	}
+	if snap == nil {
+		return m
+	}
+
+	m.snap = snap
+	m.resuming = true
+	m.blockSel = clamp(snap.BlockSel, -1, len(m.doc.Blocks)-1)
+	m.restoredState = snap.State()
+	interrupted := 0
+	for _, bs := range snap.Blocks {
+		if bs.Index < 0 || bs.Index >= len(m.doc.Blocks) {
+			continue
+		}
+		st := m.stateFor(bs.Index)
+		st.lines = append([]string(nil), bs.Lines...)
+		st.status = bs.Status
+		st.done = bs.Done
+		// A run still active when the snapshot was written cannot be
+		// reattached: its process is gone. Keep its output, mark it stopped.
+		st.active = false
+		if bs.Active {
+			interrupted++
+			st.done = true
+		}
+		if bs.Err != "" {
+			st.err = errors.New(bs.Err)
+		}
+	}
+	if interrupted > 0 {
+		m.flash = fmt.Sprintf("session resumed — %d interrupted run(s) marked stopped", interrupted)
+	} else {
+		m.flash = "session resumed"
+	}
 	return m
 }
 
@@ -230,6 +287,7 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.shutdownInline()
+		m.saveSession()
 		return tea.Quit, true
 
 	case ",":
@@ -568,6 +626,7 @@ func (m *Model) selectBlock(index int) {
 	if heading := m.headingForBlock(); heading >= 0 {
 		m.outline.sel = heading
 	}
+	m.saveSession()
 }
 
 // exitBlockMode leaves executable-block selection and highlights the
@@ -579,6 +638,7 @@ func (m *Model) exitBlockMode() {
 		m.outline.sel = idx
 	}
 	m.jumpToSelected()
+	m.saveSession()
 }
 
 // headingForBlock returns the outline entry index of the heading containing
