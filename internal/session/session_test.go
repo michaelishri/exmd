@@ -87,11 +87,16 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys, err := BlockKeys(d)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.Next = 1
 	s.BlockSel = 0
+	s.BlockSelKey = keys[0]
 	s.Globals["GREETING"] = "hello world"
 	s.Blocks = []BlockSnapshot{{
-		Index: 0, Lines: []string{"one"}, Status: 0, Done: true,
+		Key: keys[0], Index: 0, Lines: []string{"one"}, Status: 0, Done: true,
 	}}
 	if err := Save(d.Path, s); err != nil {
 		t.Fatal(err)
@@ -230,26 +235,32 @@ func TestValidate(t *testing.T) {
 	}
 	bad := *s
 	bad.Globals = map[string]string{"NOPE": "x"}
-	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "not declared") {
-		t.Fatalf("undeclared global: %v", err)
+	if err := bad.Validate(d, overrides); err != nil {
+		t.Fatalf("undeclared globals are filtered in v2: %v", err)
 	}
 	bad = *s
 	bad.Next = 99
-	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "outside the document") {
-		t.Fatalf("bad cursor: %v", err)
+	if err := bad.Validate(d, overrides); err != nil {
+		t.Fatalf("out-of-range cursor should be clamped: %v", err)
 	}
 	bad = *s
 	bad.Blocks = []BlockSnapshot{{Index: 42}}
-	if err := bad.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "outside this document") {
-		t.Fatalf("bad block index: %v", err)
+	if err := bad.Validate(d, overrides); err != nil {
+		t.Fatalf("block indices are informational in v2: %v", err)
 	}
 
 	if err := os.WriteFile(path, []byte(flowSource+"\nedited\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	changed := load(t, path)
-	if err := s.Validate(changed, overrides); err == nil || !strings.Contains(err.Error(), "changed") {
-		t.Fatalf("edited document: %v", err)
+	if err := s.Validate(changed, overrides); err != nil {
+		t.Fatalf("edited document should be accepted: %v", err)
+	}
+
+	old := *s
+	old.Version = 1
+	if err := old.Validate(d, overrides); err == nil || !strings.Contains(err.Error(), "unsupported snapshot version") {
+		t.Fatalf("v1 snapshot: %v", err)
 	}
 }
 

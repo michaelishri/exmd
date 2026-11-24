@@ -100,11 +100,12 @@ The choice is saved to `$XDG_CONFIG_HOME/exmd/config.yaml` (or
 always overrides the saved value.
 
 In the TUI, highlight a heading in the outline and press **`\``** to select the
-code blocks in its section; **`r`** runs the highlighted block *in place*, with
+code blocks in its section; **Enter** runs the highlighted block *in place*, with
 its output streaming into the document beneath it. Arrows walk between blocks,
 **`c`** copies the focused block's output to the clipboard as plain text (via
-OSC 52), **`s`** stops a running block, and each executed block keeps its output
-and status indicator as you move through the document. Drag with the mouse in
+OSC 52), **`s`** stops a running block, and **`r`** reloads the document from
+disk. Each executed block keeps its output and status indicator as you move
+through the document. Drag with the mouse in
 the text pane to select any on-screen text; releasing copies the selection to
 the clipboard as plain text. When the focused block's output contains `http://`
 or `https://` links, **`u`** copies a URL — pressing it again cycles through
@@ -121,15 +122,22 @@ exmd DOC --resume
 
 `exmd --resume --list` shows saved sessions; `exmd DOC --resume --clear`
 discards one. A resumed session restores the harvested globals, each block's
-output and status, the next block, and the highlighted block. It does **not** restore a
+output and status, and the highlighted block. It does **not** restore a
 live process, the host environment, or the scroll position: a run that was
 still active comes back stopped, with its partial output kept and ready to
 re-run.
 
+**Editing a document is supported.** Executable blocks are identified by
+content, not by line number. Prose changes restore everything; unchanged blocks
+keep their output; a changed or new block starts fresh; and outputs produced
+after a changed block are kept but marked **stale**. Saved globals roll back to
+the last still-valid checkpoint. Press **`r`** in the TUI to reload an edited
+document without restarting, or relaunch with `--resume`.
+
 Snapshots live in `$XDG_CONFIG_HOME/exmd/sessions/` (or
-`~/.config/exmd/sessions/`). They are refused when the document or any script
-it references has changed since the save, when `--set` overrides differ, or
-when the snapshot is malformed — in each case the error says how to recover.
+`~/.config/exmd/sessions/`). They are refused when `--set` overrides differ,
+when the snapshot is malformed, or when it uses the older v1 format — in each
+case the error says how to recover.
 
 This is tool-level UX, not a new execution semantic: saved globals are replayed
 into a fresh run through the §4 state rules, so no shell, working directory,

@@ -37,6 +37,7 @@ type inlineDoneMsg struct {
 type inlineState struct {
 	active    bool
 	done      bool
+	stale     bool
 	lines     []string
 	pending   string
 	status    int
@@ -141,7 +142,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	}
 	index := m.blockSel
 	st := m.stateFor(index)
-	st.active, st.done = true, false
+	st.active, st.done, st.stale = true, false, false
 	st.lines, st.pending, st.result, st.err = nil, "", nil, nil
 	st.status, st.box, st.urlIndex = 0, nil, 0
 
@@ -166,6 +167,9 @@ func (m *Model) beginInlineRun() tea.Cmd {
 		}
 		m.inlineSession = s
 	}
+	// A rerun invalidates the saved checkpoint for this block and all later
+	// runs; those outputs stay but become stale.
+	m.invalidateRunsFor(index)
 	s := m.inlineSession
 	ctx, cancel := context.WithCancel(context.Background())
 	st.cancel = cancel
@@ -266,6 +270,7 @@ func (m *Model) finalizeInline(index int, result *exec.RunResult) {
 	st.active = false
 	st.done = true
 	m.engineBusy = false
+	m.recordRun(index)
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
 	m.saveSession()

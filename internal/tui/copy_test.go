@@ -47,7 +47,7 @@ func clipPayload(t *testing.T, seq string) string {
 // runSelectedBlock presses r and pumps the inline execution to completion.
 func runSelectedBlock(t *testing.T, m Model) Model {
 	t.Helper()
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	return pump(t, mm.(Model), cmd)
 }
 

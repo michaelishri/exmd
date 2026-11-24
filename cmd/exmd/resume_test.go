@@ -145,10 +145,40 @@ func TestResumeErrorMentionsHowToClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.Validate(changed.Doc, nil)
-	if err == nil || !strings.Contains(err.Error(), "--resume --clear") {
-		t.Fatalf("stale snapshot error = %v, want a recovery hint", err)
+	if err := s.Validate(changed.Doc, nil); err != nil {
+		t.Fatalf("edited document should resume: %v", err)
 	}
+	plan, err := s.Plan(changed.Doc, nil)
+	if err != nil {
+		t.Fatalf("plan for edited document: %v", err)
+	}
+	if len(plan.Blocks) != 0 {
+		t.Fatalf("added prose should not add restored blocks: %d", len(plan.Blocks))
+	}
+}
+
+func TestV1SnapshotNeedsClear(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runbook.md")
+	if err := os.WriteFile(path, []byte(resumeDocSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := doc.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := session.New(res.Doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Version = 1
+	if err := session.Save(path, s); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := session.Load(path)
+	if err == nil || !strings.Contains(err.Error(), "--resume --clear") {
+		t.Fatalf("v1 snapshot error = %v, want a recovery hint", err)
+	}
+	_ = loaded
 }
 
 func TestExtractBoolAndResume(t *testing.T) {

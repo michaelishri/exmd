@@ -177,7 +177,7 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = mm.(Model)
 	// While running, the gutter bar is orange.
 	if !strings.Contains(got.View(), railRunActiveStyle.Render("▌")) {
@@ -262,11 +262,11 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m) // selects block 0
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown}) // block 1
 	got = mm.(Model)
-	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 
 	content := strings.Join(got.contentLines(), "\n")
@@ -322,7 +322,7 @@ func TestInlineStateCarriesBetweenBlocks(t *testing.T) {
 	if got.blockSel != 3 {
 		t.Fatalf("blockSel = %d, want 3", got.blockSel)
 	}
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 	if !strings.Contains(strings.Join(got.inline[3].lines, "\n"), "workspace:") {
 		t.Fatalf("step 3 output missing: %v", got.inline[3].lines)
@@ -331,7 +331,7 @@ func TestInlineStateCarriesBetweenBlocks(t *testing.T) {
 	// Jump to the last block (step 9) and run it: it echoes WORK.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
 	got = mm.(Model)
-	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 
 	out := strings.Join(got.inline[len(got.doc.Blocks)-1].lines, "\n")
@@ -356,7 +356,7 @@ func TestInlineLastBlockOutputIsVisible(t *testing.T) {
 		t.Fatalf("blockSel = %d, want the last block %d", got.blockSel, index)
 	}
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 	if !got.inline[index].done {
 		t.Fatal("last block's inline run did not finish")
@@ -389,7 +389,7 @@ func TestInlineFailureRailTurnsRed(t *testing.T) {
 	// Down to the second block, which exits non-zero.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
 	got = mm.(Model)
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = mm.(Model)
 	got = pump(t, got, cmd)
 

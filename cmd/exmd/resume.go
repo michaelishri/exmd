@@ -16,8 +16,9 @@ exmd DOC --resume --clear
                      discard a saved session
 
 A resume replays saved globals and block outputs into a fresh run. --set
-overrides must match the saved ones. If the document or a referenced script
-changed, clear it with \"exmd DOC --resume --clear\" and start a new session.`
+overrides must match the saved ones. Edited executable blocks start fresh and
+later outputs are marked stale; a v1 snapshot must be cleared with
+\"exmd DOC --resume --clear\".`
 
 // extractBool removes a stand-alone boolean flag from args and reports
 // whether it appeared. Flags may appear in any position.

@@ -170,7 +170,7 @@ func TestFooterIsContextAware(t *testing.T) {
 	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
 	m = mm.(Model)
 	if f := footer(m); !strings.Contains(f, "j/k blocks") ||
-		!strings.Contains(f, "r run") {
+		!strings.Contains(f, "enter run") || !strings.Contains(f, "r reload") {
 		t.Fatalf("block footer = %q", f)
 	}
 }

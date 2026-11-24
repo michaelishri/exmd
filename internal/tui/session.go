@@ -4,6 +4,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/michaelishri/exmd/internal/exec"
 	"github.com/michaelishri/exmd/internal/session"
 )
 
@@ -29,6 +30,38 @@ func (m *Model) saveSession() {
 	m.lastSave = time.Now()
 }
 
+// invalidateRunsFor drops the saved checkpoint for this block and everything
+// after it. Their outputs stay visible but become stale, because a rerun can
+// change the globals they were produced with.
+func (m *Model) invalidateRunsFor(index int) {
+	if m.snap == nil || index < 0 || index >= len(m.blockKeys) {
+		return
+	}
+	stale := m.snap.TruncateRunsAt(m.blockKeys[index])
+	set := make(map[string]bool, len(stale))
+	for _, key := range stale {
+		set[key] = true
+	}
+	for i, key := range m.blockKeys {
+		if i == index || !set[key] {
+			continue
+		}
+		if st := m.inline[i]; st != nil {
+			st.stale = true
+		}
+	}
+}
+
+// recordRun appends the state observed after a completed run.
+func (m *Model) recordRun(index int) {
+	if m.snap == nil || m.inlineSession == nil ||
+		index < 0 || index >= len(m.blockKeys) {
+		return
+	}
+	var state exec.SessionState = m.inlineSession.State()
+	m.snap.RecordRun(m.blockKeys[index], state)
+}
+
 // saveSessionThrottled coalesces frequent changes into at most one write per
 // saveInterval.
 func (m *Model) saveSessionThrottled() {
@@ -51,6 +84,12 @@ func (m *Model) captureSnapshot() {
 	}
 	s := m.snap
 	s.BlockSel = m.blockSel
+	s.Keys = append([]string(nil), m.blockKeys...)
+	if m.blockSel >= 0 && m.blockSel < len(m.blockKeys) {
+		s.BlockSelKey = m.blockKeys[m.blockSel]
+	} else {
+		s.BlockSelKey = ""
+	}
 
 	// While a run is in flight the engine goroutine owns the session; only
 	// touch it once the run has ended (the pre-run save already recorded the
@@ -73,6 +112,10 @@ func (m *Model) captureSnapshot() {
 			Status: st.status,
 			Done:   st.done,
 			Active: st.active,
+			Stale:  st.stale,
+		}
+		if index < len(m.blockKeys) {
+			bs.Key = m.blockKeys[index]
 		}
 		if st.err != nil {
 			bs.Err = st.err.Error()

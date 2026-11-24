@@ -25,35 +25,68 @@ import (
 
 // FormatVersion is the on-disk snapshot format. Unknown versions are refused
 // rather than interpreted.
-const FormatVersion = 1
+const FormatVersion = 2
 
 // Snapshot is one saved viewer session. Files are keyed by the absolute
 // document path, so there is a single latest snapshot per document.
 type Snapshot struct {
 	Version     int               `yaml:"version"`
 	DocPath     string            `yaml:"doc_path"`
-	Fingerprint string            `yaml:"fingerprint"`
+	Fingerprint string            `yaml:"fingerprint,omitempty"` // informational only in v2
 	Overrides   map[string]string `yaml:"overrides,omitempty"`
 
 	Globals map[string]string `yaml:"globals,omitempty"`
 	Absent  []string          `yaml:"absent,omitempty"`
 
-	Next     int             `yaml:"next"`
-	BlockSel int             `yaml:"block_sel"`
-	Blocks   []BlockSnapshot `yaml:"blocks,omitempty"`
+	Next        int             `yaml:"next"`
+	BlockSel    int             `yaml:"block_sel"`
+	BlockSelKey string          `yaml:"block_sel_key,omitempty"`
+	Keys        []string        `yaml:"keys,omitempty"`
+	Blocks      []BlockSnapshot `yaml:"blocks,omitempty"`
+	Runs        []RunSnapshot   `yaml:"runs,omitempty"`
 
 	UpdatedAt time.Time `yaml:"updated_at"`
 }
 
-// BlockSnapshot is one block's visible output and status. Its index is into
-// doc.Blocks (0-based).
+// BlockSnapshot is one block's visible output and status. Key identifies the
+// executable block by content, so it survives insertions and renumbering.
 type BlockSnapshot struct {
+	Key    string   `yaml:"key"`
 	Index  int      `yaml:"index"`
 	Lines  []string `yaml:"lines,omitempty"`
 	Status int      `yaml:"status,omitempty"`
 	Done   bool     `yaml:"done,omitempty"`
 	Active bool     `yaml:"active,omitempty"`
 	Err    string   `yaml:"err,omitempty"`
+	Stale  bool     `yaml:"stale,omitempty"`
+}
+
+// RunSnapshot is one completed execution, recorded in execution order. After
+// holds the §4 state observed immediately after that run, so a modified
+// document can roll back to the last still-valid checkpoint.
+type RunSnapshot struct {
+	Key   string            `yaml:"key"`
+	After exec.SessionState `yaml:"after"`
+}
+
+// RestorePlan is the result of matching a snapshot against a possibly edited
+// document. It is built by Snapshot.Plan and applied by the TUI.
+type RestorePlan struct {
+	State    exec.SessionState
+	Blocks   map[int]BlockRestore
+	BlockSel int
+	Changed  []string
+	Stale    []string
+}
+
+// BlockRestore is one block's restored presentation state.
+type BlockRestore struct {
+	Lines  []string
+	Status int
+	Done   bool
+	Active bool
+	Err    string
+	Stale  bool
 }
 
 // Dir is the directory holding session snapshots. It lives alongside the
@@ -128,6 +161,10 @@ func New(d *doc.Document, overrides map[string]string) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	keys, err := BlockKeys(d)
+	if err != nil {
+		return nil, err
+	}
 	present, diags := d.ResolveGlobals(overrides)
 	for _, dg := range diags {
 		if dg.Severity == doc.SeverityError {
@@ -141,6 +178,7 @@ func New(d *doc.Document, overrides map[string]string) (*Snapshot, error) {
 		Overrides:   cloneMap(overrides),
 		Globals:     present,
 		BlockSel:    -1,
+		Keys:        keys,
 		UpdatedAt:   time.Now().UTC(),
 	}
 	for name := range d.Globals {
@@ -278,27 +316,17 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 	if s.DocPath != abs {
 		return fmt.Errorf("snapshot belongs to another document (%s); %s", s.DocPath, hint)
 	}
-	fp, err := Fingerprint(d)
-	if err != nil {
-		return fmt.Errorf("cannot check the saved script files: %w; %s", err, hint)
-	}
-	if s.Fingerprint != fp {
-		return fmt.Errorf("the document or one of its scripts changed since the snapshot was saved; %s", hint)
-	}
+	// The document-wide fingerprint is informational in v2. Edited
+	// executable blocks are matched by key and rolled back by Plan instead
+	// of rejecting the whole snapshot.
 	if !sameMap(s.Overrides, overrides) {
 		return fmt.Errorf("--set overrides differ from the saved session; replay them or clear the snapshot with `exmd DOC --resume --clear`")
 	}
-	if err := exec.ValidateState(d, s.State()); err != nil {
+	if err := exec.ValidateState(d, filterState(d, s.State())); err != nil {
 		return fmt.Errorf("saved state is invalid: %w; %s", err, hint)
 	}
-	if s.BlockSel < -1 || s.BlockSel >= len(d.Blocks) {
-		return fmt.Errorf("saved block selection %d is outside this document; %s", s.BlockSel, hint)
-	}
-	for _, b := range s.Blocks {
-		if b.Index < 0 || b.Index >= len(d.Blocks) {
-			return fmt.Errorf("saved output for block %d is outside this document; %s", b.Index, hint)
-		}
-	}
+	// Block indices and selection are informational in v2: documents can
+	// shrink or be reordered, and Plan remaps selection by content key.
 	return nil
 }
 

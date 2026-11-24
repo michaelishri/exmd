@@ -24,7 +24,7 @@ const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
   exmd DOC [--resume] [--set K=V] [--theme NAME]
-                                    open a runbook in the TUI (backtick selects blocks, r runs, c copies output, s stops, , settings);
+                                    open a runbook in the TUI (backtick selects blocks, enter runs, r reloads, c copies output, s stops, , settings);
                                     --resume restores the last saved session for DOC
   exmd --resume --list               list saved sessions
   exmd DOC --resume --clear          discard a saved session
@@ -48,8 +48,8 @@ Aliases: catppuccin, atom, atom-light, tokyonight, rosepine.
 
 The TUI saves one session per document as you work. Pass --resume to restore its
 globals, block outputs, and selected block; nothing about the spec's state model
-changes (SPEC.md §9). A snapshot is invalidated when the document or a script it
-references is edited.
+changes (SPEC.md §9). Edited executable blocks start fresh and later outputs are
+marked stale. Press r in the TUI to reload an edited document.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 

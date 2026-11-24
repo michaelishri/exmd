@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // clipPayloads decodes each OSC 52 copy sequence in a raw clipboard write.
@@ -174,16 +173,12 @@ func TestCopyURLWithoutBlock(t *testing.T) {
 
 func TestURLHintAppearsOnlyWithURLs(t *testing.T) {
 	m := enterBlockModeFromFirstHeading(t, newViewerFromDoc(t, 120, 40, "testdata/urls.md", nil))
-	footer := func(m Model) string {
-		lines := strings.Split(m.View(), "\n")
-		return ansi.Strip(lines[len(lines)-2])
-	}
-	if strings.Contains(footer(m), "u url") {
+	if strings.Contains(m.keyHints(), "u url") {
 		t.Fatal("u hint shown before the block has output")
 	}
 	m = runSelectedBlock(t, m)
-	if !strings.Contains(footer(m), "u url") {
-		t.Fatalf("u hint missing with URLs in output: %q", footer(m))
+	if !strings.Contains(m.keyHints(), "u url") {
+		t.Fatalf("u hint missing with URLs in output: %q", m.keyHints())
 	}
 }
 

@@ -81,6 +81,9 @@ type Model struct {
 	restoredState exec.SessionState
 	resuming      bool
 	lastSave      time.Time
+
+	// blockKeys maps document block indices to stable content identities.
+	blockKeys []string
 	// engineBusy is true while a run goroutine owns inlineSession. State is
 	// only read from the snapshot taken before the run and after it ends.
 	engineBusy bool
@@ -124,41 +127,84 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 	m.content.MouseWheelEnabled = true
 	if s, err := session.New(res.Doc, overrides); err == nil {
 		m.snap = s
+		m.blockKeys = append([]string(nil), s.Keys...)
 	}
 	if snap == nil {
 		return m
 	}
 
+	plan, err := snap.Plan(res.Doc, overrides)
+	if err != nil {
+		m.flash = "cannot resume: " + err.Error()
+		return m
+	}
 	m.snap = snap
-	m.resuming = true
-	m.blockSel = clamp(snap.BlockSel, -1, len(m.doc.Blocks)-1)
-	m.restoredState = snap.State()
-	interrupted := 0
-	for _, bs := range snap.Blocks {
-		if bs.Index < 0 || bs.Index >= len(m.doc.Blocks) {
-			continue
+	m.blockKeys = append([]string(nil), snap.Keys...)
+	if len(m.blockKeys) != len(res.Doc.Blocks) {
+		if keys, err := session.BlockKeys(res.Doc); err == nil {
+			m.blockKeys = keys
 		}
-		st := m.stateFor(bs.Index)
-		st.lines = append([]string(nil), bs.Lines...)
-		st.status = bs.Status
-		st.done = bs.Done
-		// A run still active when the snapshot was written cannot be
-		// reattached: its process is gone. Keep its output, mark it stopped.
+	}
+	m.resuming = true
+	m.restoredState = plan.State
+	m.blockSel = plan.BlockSel
+	interrupted := applyRestore(&m, plan)
+
+	m.snap.Keys = append([]string(nil), m.blockKeys...)
+	m.snap.BlockSel = m.blockSel
+	if m.blockSel >= 0 && m.blockSel < len(m.blockKeys) {
+		m.snap.BlockSelKey = m.blockKeys[m.blockSel]
+	}
+	m.snap.Globals = cloneStringMap(plan.State.Globals)
+	m.snap.Absent = append([]string(nil), plan.State.Absent...)
+	m.snap.Next = plan.State.Next
+
+	m.flash = resumeSummary(len(plan.Changed), len(plan.Stale), interrupted)
+	return m
+}
+
+// applyRestore folds a restore plan into the model's inline boxes. It returns
+// the number of saved runs that were interrupted when the snapshot was written.
+func applyRestore(m *Model, plan *session.RestorePlan) int {
+	interrupted := 0
+	for index, br := range plan.Blocks {
+		st := m.stateFor(index)
+		st.lines = append([]string(nil), br.Lines...)
+		st.status = br.Status
+		st.done = br.Done
 		st.active = false
-		if bs.Active {
+		st.stale = br.Stale
+		if br.Active {
 			interrupted++
 			st.done = true
 		}
-		if bs.Err != "" {
-			st.err = errors.New(bs.Err)
+		if br.Err != "" {
+			st.err = errors.New(br.Err)
 		}
 	}
-	if interrupted > 0 {
-		m.flash = fmt.Sprintf("session resumed — %d interrupted run(s) marked stopped", interrupted)
-	} else {
-		m.flash = "session resumed"
+	return interrupted
+}
+
+func resumeSummary(changed, stale, interrupted int) string {
+	parts := []string{"session resumed"}
+	if changed > 0 {
+		parts = append(parts, fmt.Sprintf("%d changed block(s)", changed))
 	}
-	return m
+	if stale > 0 {
+		parts = append(parts, fmt.Sprintf("%d stale output(s)", stale))
+	}
+	if interrupted > 0 {
+		parts = append(parts, fmt.Sprintf("%d interrupted run(s) marked stopped", interrupted))
+	}
+	return strings.Join(parts, " — ")
+}
+
+func cloneStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func (m Model) Init() tea.Cmd {
@@ -298,11 +344,8 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 
 	case "r":
-		if m.inlineActive() || m.blockSel < 0 {
-			return nil, true
-		}
-		// Execute the highlighted block in place, under the code.
-		return m.beginInlineRun(), true
+		m.reloadDocument()
+		return nil, true
 
 	case "c":
 		return m.copyBlockOutput(), true
@@ -373,7 +416,7 @@ func (m *Model) copyBlockOutput() tea.Cmd {
 		text = st.copiedText()
 	}
 	if text == "" {
-		m.flash = "no output to copy — run it with r first"
+		m.flash = "no output to copy — run it with enter first"
 		return nil
 	}
 	if err := copyToClipboard(text); err != nil {
@@ -386,6 +429,9 @@ func (m *Model) copyBlockOutput() tea.Cmd {
 		noun = "line"
 	}
 	m.flash = fmt.Sprintf("copied %d %s from block %d", lines, noun, m.blockSel+1)
+	if st := m.inline[m.blockSel]; st != nil && st.stale {
+		m.flash += " — stale output, rerun with enter to refresh"
+	}
 	return nil
 }
 
@@ -466,6 +512,11 @@ func (m *Model) handleOutlineKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func (m *Model) handleBlockKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if m.blockSel >= 0 {
 		switch msg.String() {
+		case "enter":
+			if m.inlineActive() {
+				return nil, true
+			}
+			return m.beginInlineRun(), true
 		case "down", "j":
 			if m.blockSel < len(m.out.Blocks)-1 {
 				m.selectBlock(m.blockSel + 1)
@@ -872,11 +923,16 @@ func (m Model) keyHints() string {
 	case m.inlineActive():
 		hints = []string{"s stop", "q quit"}
 	case m.blockSel >= 0:
-		hints = []string{"j/k blocks", "r run", "c copy", "s stop", "esc back", "q quit"}
+		hints = []string{"j/k blocks", "enter run", "c copy", "s stop", "r reload", "esc back", "q quit"}
 	case m.focus == focusOutline:
-		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "q quit"}
+		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "r reload", "q quit"}
 	default:
-		hints = []string{"j/k scroll", "drag copy", "tab outline", "` blocks", "r run", "q quit"}
+		hints = []string{"j/k scroll", "drag copy", "tab outline", "` blocks", "r reload", "q quit"}
+	}
+	if m.blockSel >= 0 && m.out != nil {
+		if st := m.inline[m.blockSel]; st != nil && st.stale {
+			hints = append(hints, "stale — enter rerun")
+		}
 	}
 	if m.focusedHasURL() {
 		hints = append(hints, "u url")
@@ -1002,8 +1058,22 @@ func (m Model) rawContentLines() []string {
 		return nil
 	}
 	inserts := m.inlineInsertions()
+	staleLines := make(map[int]bool)
+	for index, block := range m.out.Blocks {
+		if st := m.inline[index]; st != nil && st.stale && len(st.lines) > 0 {
+			staleLines[block.Line] = true
+		}
+	}
 	out := make([]string, 0, len(m.out.Lines))
 	for i, l := range m.out.Lines {
+		if staleLines[i] {
+			marker := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(m.theme.Warning)).Render("  · stale")
+			room := ansi.StringWidth(l) - ansi.StringWidth(marker)
+			if room > 0 {
+				l = ansi.Truncate(l, room, "") + marker
+			}
+		}
 		out = append(out, l)
 		out = append(out, inserts[i]...)
 	}

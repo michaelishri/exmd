@@ -92,7 +92,7 @@ func TestAcceptanceQuitMidRunSavesRealSnapshot(t *testing.T) {
 
 	m := newViewerFromDoc(t, 120, 40, path, nil)
 	m.blockSel = 0
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	// Run the tea cmds in goroutines, as the Bubble Tea runtime does, so the
 	// block is still in flight when the quit key arrives.
 	if batch, ok := cmd().(tea.BatchMsg); ok {
@@ -135,10 +135,15 @@ func TestAcceptanceResumeAfterInterruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys, err := session.BlockKeys(res.Doc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.Next = 1 // the engine advances before a block executes
 	s.BlockSel = 0
+	s.BlockSelKey = keys[0]
 	s.Blocks = []session.BlockSnapshot{{
-		Index: 0, Lines: []string{"partial output"}, Active: true,
+		Key: keys[0], Index: 0, Lines: []string{"partial output"}, Active: true,
 	}}
 	if err := session.Save(path, s); err != nil {
 		t.Fatal(err)
@@ -163,9 +168,8 @@ func TestAcceptanceResumeAfterInterruption(t *testing.T) {
 	}
 }
 
-// Editing the document after saving makes the snapshot unusable, with a
-// message that tells the user how to recover.
-func TestAcceptanceStaleDocumentRejected(t *testing.T) {
+// Prose-only edits do not invalidate a snapshot.
+func TestAcceptanceProseEditStillResumes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := acceptanceDoc(t)
 	res, err := doc.Load(path)
@@ -186,17 +190,20 @@ func TestAcceptanceStaleDocumentRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.Validate(changed.Doc, nil)
-	if err == nil || !strings.Contains(err.Error(), "changed") {
-		t.Fatalf("stale document not rejected: %v", err)
+	if err := s.Validate(changed.Doc, nil); err != nil {
+		t.Fatalf("edited document should resume: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--clear") {
-		t.Fatalf("error does not suggest the next step: %v", err)
+	plan, err := s.Plan(changed.Doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Changed) != 0 || len(plan.Stale) != 0 {
+		t.Fatalf("prose edit invalidated blocks: changed=%v stale=%v", plan.Changed, plan.Stale)
 	}
 }
 
-// The fingerprint covers referenced scripts, not just the document.
-func TestAcceptanceStaleScriptRejected(t *testing.T) {
+// Editing a referenced script changes the executable block's identity.
+func TestAcceptanceEditedScriptInvalidatesBlock(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	script := filepath.Join(dir, "helper.sh")
@@ -222,9 +229,12 @@ func TestAcceptanceStaleScriptRejected(t *testing.T) {
 	if err := os.WriteFile(script, []byte("echo new\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err = s.Validate(res.Doc, nil)
-	if err == nil || !strings.Contains(err.Error(), "changed") {
-		t.Fatalf("edited script not detected: %v", err)
+	plan, err := s.Plan(res.Doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Changed) != 1 {
+		t.Fatalf("edited script did not invalidate its block: %v", plan.Changed)
 	}
 }
 

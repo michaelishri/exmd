@@ -24,7 +24,7 @@ func resumeViewer(t *testing.T, overrides map[string]string) Model {
 func runBlockAt(t *testing.T, m Model, index int) Model {
 	t.Helper()
 	m.blockSel = index
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	return pump(t, mm.(Model), cmd)
 }
 
@@ -102,9 +102,14 @@ func TestRestoredActiveRunIsMarkedStopped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys, err := session.BlockKeys(res.Doc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.BlockSel = 0
+	s.BlockSelKey = keys[0]
 	s.Blocks = []session.BlockSnapshot{{
-		Index: 0, Lines: []string{"partial output"}, Active: true,
+		Key: keys[0], Index: 0, Lines: []string{"partial output"}, Active: true,
 	}}
 
 	m := NewWithSnapshot(res, nil, s)
