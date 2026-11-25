@@ -117,6 +117,7 @@ func Render(d *doc.Document, width int, th theme.Theme) *Output {
 				Label:    blockLabel(blk),
 				BlockRef: blk,
 			})
+			mark := &out.Blocks[len(out.Blocks)-1]
 			out.appendBadge(blk, th)
 			// Strip the :exec suffix so chroma picks the right lexer; this
 			// only affects rendering, never execution (SPEC.md §9).
@@ -129,7 +130,11 @@ func Render(d *doc.Document, width int, th theme.Theme) *Output {
 				// line; add a matching shaded blank row below the last one.
 				out.Lines = append(out.Lines,
 					canvas+" "+exec+strings.Repeat(" ", width-1)+"\x1b[0m")
-				// And a plain spacing row below the whole box.
+			}
+			// The surface ends at the shaded blank row; the plain spacing
+			// row below it belongs to the page, not to the block.
+			mark.End = len(out.Lines)
+			if color {
 				out.Lines = append(out.Lines, "")
 			}
 		default:
@@ -137,35 +142,7 @@ func Render(d *doc.Document, width int, th theme.Theme) *Output {
 		}
 	}
 
-	computeBlockExtents(out, color)
 	return out
-}
-
-// computeBlockExtents records where each rendered block ends: at the next
-// heading or block mark minus its separator blank. The final block also
-// excludes the plain spacing row after its shaded surface.
-func computeBlockExtents(out *Output, color bool) {
-	marks := make([]int, 0, len(out.Headings)+len(out.Blocks))
-	for _, hm := range out.Headings {
-		marks = append(marks, hm.Line)
-	}
-	for i := range out.Blocks {
-		marks = append(marks, out.Blocks[i].Line)
-	}
-	sort.Ints(marks)
-	for i := range out.Blocks {
-		end := len(out.Lines)
-		if color {
-			end-- // trailing spacing row of the final exec block
-		}
-		for _, m := range marks {
-			if m > out.Blocks[i].Line {
-				end = m - 1
-				break
-			}
-		}
-		out.Blocks[i].End = end
-	}
 }
 
 // blockLabel is the single source of truth for an executable block's badge
@@ -178,18 +155,36 @@ func blockLabel(b *doc.Block) string {
 // heading and every executable-block fence, in document order. Each heading
 // chunk ends right after the heading line — a synthetic boundary starts the
 // section's content as its own chunk, which the separator blanks before, so
-// every heading is followed by an empty line in the rendered output.
+// every heading is followed by an empty line in the rendered output. A
+// boundary after each block's closing fence keeps following prose out of the
+// executable chunk.
 func boundaries(d *doc.Document) []boundary {
 	var bs []boundary
-	bs = append(bs, boundary{line: d.BodyLine, heading: -1, block: -1})
+	used := map[int]bool{}
+	add := func(b boundary) {
+		bs = append(bs, b)
+		used[b.line] = true
+	}
+	add(boundary{line: d.BodyLine, heading: -1, block: -1})
 	for i, h := range d.Headings {
 		if h.Line > 0 {
-			bs = append(bs, boundary{line: h.Line, heading: i, block: -1})
-			bs = append(bs, boundary{line: h.Line + 1, heading: -1, block: -1})
+			add(boundary{line: h.Line, heading: i, block: -1})
+			add(boundary{line: h.Line + 1, heading: -1, block: -1})
 		}
 	}
 	for i, b := range d.Blocks {
-		bs = append(bs, boundary{line: b.Line, heading: -1, block: i})
+		add(boundary{line: b.Line, heading: -1, block: i})
+	}
+	// Without a boundary after the closing fence, prose following an
+	// executable block joins its chunk and is painted with the executable
+	// surface. Skip the boundary when a heading or another block already
+	// starts on that line: it cuts the chunk at the same place and must
+	// keep its own (higher priority) role.
+	for _, b := range d.Blocks {
+		line := b.EndLine + 1
+		if !used[line] {
+			add(boundary{line: line, heading: -1, block: -1})
+		}
 	}
 	sort.SliceStable(bs, func(i, j int) bool { return bs[i].line < bs[j].line })
 	return bs

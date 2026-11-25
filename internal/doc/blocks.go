@@ -68,6 +68,10 @@ func collectBlock(b *ast.FencedCodeBlock, src []byte, starts []int, docdir strin
 
 	segs := b.Lines()
 	blk.BodyLine = blk.Line + 1
+	// Goldmark appends one segment per body line and consumes the closing
+	// fence without appending it, so this is the closing fence's line
+	// (or one past the last body line for an unclosed fence).
+	blk.EndLine = blk.BodyLine + segs.Len()
 
 	var body strings.Builder
 	for i := 0; i < segs.Len(); i++ {

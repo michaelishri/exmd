@@ -142,6 +142,70 @@ func TestLoadCRLEndings(t *testing.T) {
 	}
 }
 
+func TestBlockEndLine(t *testing.T) {
+	tests := []struct {
+		name  string
+		file  string
+		want  []int // expected EndLine per block, in document order
+		lines []int // expected Line per block
+	}{
+		{"embedded", "valid-block.md", []int{13}, []int{11}},
+		{"list items", "valid-list-items.md", []int{9, 15}, []int{7, 13}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := loadFixture(t, tt.file, false)
+			if res.HasErrors() {
+				t.Fatalf("unexpected errors:\n%s", allMessages(res))
+			}
+			if len(res.Doc.Blocks) != len(tt.want) {
+				t.Fatalf("blocks = %d, want %d", len(res.Doc.Blocks), len(tt.want))
+			}
+			for i, b := range res.Doc.Blocks {
+				if b.Line != tt.lines[i] || b.EndLine != tt.want[i] {
+					t.Errorf("block %d: line/end = %d/%d, want %d/%d", i, b.Line, b.EndLine, tt.lines[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBlockEndLineScriptRef(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.md")
+	src := "---\ntype: runbook\n---\n\n```bash:exec\n@helper.sh\n```\n\nMy text.\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	res, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(res.Doc.Blocks) != 1 {
+		t.Fatalf("blocks = %d, want 1", len(res.Doc.Blocks))
+	}
+	if b := res.Doc.Blocks[0]; b.Kind != KindScript || b.Line != 5 || b.EndLine != 7 {
+		t.Fatalf("block kind/line/end = %v/%d/%d, want script/5/7", b.Kind, b.Line, b.EndLine)
+	}
+}
+
+func TestBlockEndLineWithTrailingBlankBody(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.md")
+	src := "---\ntype: runbook\n---\n\n```bash:exec\necho hi\n\n```\n\nMy text.\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	res, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(res.Doc.Blocks) != 1 {
+		t.Fatalf("blocks = %d, want 1", len(res.Doc.Blocks))
+	}
+	if b := res.Doc.Blocks[0]; b.Line != 5 || b.BodyLine != 6 || b.EndLine != 8 {
+		t.Fatalf("block line/body/end = %d/%d/%d, want 5/6/8", b.Line, b.BodyLine, b.EndLine)
+	}
+}
+
 func TestValidListItemsOrder(t *testing.T) {
 	res := loadFixture(t, "valid-list-items.md", false)
 	if len(res.Doc.Blocks) != 2 {

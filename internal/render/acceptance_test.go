@@ -41,6 +41,9 @@ func TestAcceptanceThemes(t *testing.T) {
 		"exec":  "---\ntype: runbook\n---\n\n```bash:exec\necho hello\n```\n",
 		"mixed": "---\ntype: runbook\n---\n\n# Title\n\n## 1. Section\n\n`export` here.\n\n" +
 			"```bash:exec\necho hello\n```\n\n```bash\nplain fence\n```\n",
+		"exec-with-prose": "---\ntype: runbook\n---\n\n" +
+			"```bash:exec\n@scripts/myscript.sh\n```\n\nMy text.\n\n" +
+			"```bash\nplain fence\n```\n\nAfter.\n\n## Step\n\nEnd.\n",
 	}
 
 	for name, src := range sources {

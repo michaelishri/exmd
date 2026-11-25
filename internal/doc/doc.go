@@ -37,6 +37,7 @@ type Block struct {
 	ScriptAbs  string // ScriptPath resolved against the document directory
 	Line       int    // 1-based line of the fence info string
 	BodyLine   int    // 1-based line of the first body line
+	EndLine    int    // 1-based line of the closing fence (one past the last body line when unclosed)
 }
 
 // Heading is a Markdown heading, used for the document outline.
