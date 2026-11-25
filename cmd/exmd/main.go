@@ -18,7 +18,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-const version = "0.6.1"
+const version = "0.6.2"
 
 const usage = `exmd — executable Markdown (runbooks)
 
