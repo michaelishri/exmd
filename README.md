@@ -103,9 +103,10 @@ In the TUI, highlight a heading in the outline and press **`\``** to select the
 code blocks in its section; **Enter** runs the highlighted block *in place*, with
 its output streaming into the document beneath it. Arrows walk between blocks,
 **`c`** copies the focused block's output to the clipboard as plain text (via
-OSC 52), **`s`** stops a running block, and **`r`** reloads the document from
-disk. Each executed block keeps its output and status indicator as you move
-through the document. Drag with the mouse in
+OSC 52), **Esc** stops a running block (press it again to leave block
+selection), and **`r`** reloads the document from disk. Each executed block
+keeps its output and status indicator as you move through the document. Drag
+with the mouse in
 the text pane to select any on-screen text; releasing copies the selection to
 the clipboard as plain text. When the focused block's output contains `http://`
 or `https://` links, **`u`** copies a URL — pressing it again cycles through

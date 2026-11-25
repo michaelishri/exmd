@@ -170,9 +170,17 @@ func TestFooterIsContextAware(t *testing.T) {
 	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
 	m = mm.(Model)
 	if f := footer(m); !strings.Contains(f, "j/k blocks") ||
-		!strings.Contains(f, "enter run") || !strings.Contains(f, "r reload") {
+		!strings.Contains(f, "enter run") || !strings.Contains(f, "r reload") ||
+		!strings.Contains(f, "esc back") || strings.Contains(f, "s stop") {
 		t.Fatalf("block footer = %q", f)
 	}
+
+	// Running: Esc is the stop key.
+	m.stateFor(0).active = true
+	if f := footer(m); !strings.Contains(f, "esc stop") || strings.Contains(f, "s stop") {
+		t.Fatalf("running footer = %q", f)
+	}
+	m.stateFor(0).active = false
 }
 
 func TestViewerNarrowHidesSidebar(t *testing.T) {

@@ -124,6 +124,17 @@ func (m *Model) inlineActive() bool {
 	return false
 }
 
+// stopActiveRuns cancels every in-flight inline run (SPEC.md §4.7). The
+// engine terminates each block's process group; finalization happens later
+// when inlineDoneMsg arrives.
+func (m *Model) stopActiveRuns() {
+	for _, st := range m.inline {
+		if st != nil && st.active && st.cancel != nil {
+			st.cancel()
+		}
+	}
+}
+
 // stateFor returns the persistent execution state for a block.
 func (m *Model) stateFor(index int) *inlineState {
 	st := m.inline[index]

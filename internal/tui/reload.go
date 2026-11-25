@@ -13,7 +13,7 @@ import (
 // on changed state are marked stale.
 func (m *Model) reloadDocument() {
 	if m.inlineActive() {
-		m.flash = "stop the running block first (s), then reload"
+		m.flash = "stop the running block first (esc), then reload"
 		return
 	}
 	res, err := doc.Load(m.doc.Path)

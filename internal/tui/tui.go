@@ -328,6 +328,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return m.handleBlockKey(msg)
 }
 
+// clearTransientState drops a mouse selection first, then block selection.
+// It is the no-run behavior of Esc and the whole behavior of `v`.
+func (m *Model) clearTransientState() {
+	if m.sel.set {
+		m.sel.clear()
+		m.setContent()
+		return
+	}
+	if m.blockSel >= 0 {
+		m.exitBlockMode()
+	}
+}
+
 // handleGlobalKey processes keys that work in every focus area.
 func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
@@ -353,26 +366,19 @@ func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "u":
 		return m.copyBlockURL(), true
 
-	case "s":
-		// §4.7: the engine terminates the current process group.
-		for _, st := range m.inline {
-			if st != nil && st.active && st.cancel != nil {
-				st.cancel()
-			}
-		}
-		return nil, true
-
-	case "v", "esc":
-		if m.sel.set {
-			// Cancel a text selection or an in-progress drag first.
-			m.sel.clear()
-			m.setContent()
+	case "esc":
+		if m.inlineActive() {
+			// A running block owns Esc: stop it but keep the selection so
+			// its output can be inspected or rerun. Pressing Esc again
+			// then leaves block mode.
+			m.stopActiveRuns()
 			return nil, true
 		}
-		if m.blockSel >= 0 {
-			// Leave block selection. The heading is highlighted again.
-			m.exitBlockMode()
-		}
+		m.clearTransientState()
+		return nil, true
+
+	case "v":
+		m.clearTransientState()
 		return nil, true
 
 	case "tab":
@@ -921,9 +927,9 @@ func (m Model) keyHints() string {
 	var hints []string
 	switch {
 	case m.inlineActive():
-		hints = []string{"s stop", "q quit"}
+		hints = []string{"esc stop", "q quit"}
 	case m.blockSel >= 0:
-		hints = []string{"j/k blocks", "enter run", "c copy", "s stop", "r reload", "esc back", "q quit"}
+		hints = []string{"j/k blocks", "enter run", "c copy", "r reload", "esc back", "q quit"}
 	case m.focus == focusOutline:
 		hints = []string{"j/k navigate", "enter jump", "` blocks", "tab content", "r reload", "q quit"}
 	default:

@@ -24,7 +24,7 @@ const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
   exmd DOC [--resume] [--set K=V] [--theme NAME]
-                                    open a runbook in the TUI (backtick selects blocks, enter runs, r reloads, c copies output, s stops, , settings);
+                                    open a runbook in the TUI (backtick selects blocks, enter runs, r reloads, c copies output, esc stops, , settings);
                                     --resume restores the last saved session for DOC
   exmd --resume --list               list saved sessions
   exmd DOC --resume --clear          discard a saved session
