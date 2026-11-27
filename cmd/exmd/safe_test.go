@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/michaelishri/exmd/internal/session"
 )
 
 // runCaptured runs the CLI with stdout and stderr captured.
@@ -78,6 +80,35 @@ func TestCLINeutralizesDocumentControlCharacters(t *testing.T) {
 		assertNoControl(t, label+" stderr", errOut)
 		if !strings.Contains(out+errOut, "^[") {
 			t.Errorf("%s: expected a visible ^[ marker, got:\n%s%s", label, out, errOut)
+		}
+	}
+}
+
+// TestOpenAndResumeRunPreflight: the viewer and --resume refuse a document
+// whose script or interpreter is missing before anything can run (SPEC.md
+// §5.3), with the same diagnostics as `exmd check`.
+func TestOpenAndResumeRunPreflight(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.md")
+	src := "---\ntype: runbook\n---\n# T\n\n```bash:exec\n@missing.sh\n```\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{path}, {path, "--resume"}} {
+		if len(args) == 2 {
+			// A saved session must exist for --resume to reach the document.
+			snap := &session.Snapshot{Version: session.FormatVersion, DocPath: path, BlockSel: -1}
+			if err := session.Save(path, snap); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out, errOut, code := runCaptured(t, args...)
+		if code != 2 {
+			t.Errorf("%v: exit %d, want 2", args, code)
+		}
+		if !strings.Contains(out+errOut, "script file not found") {
+			t.Errorf("%v: missing pre-flight diagnostic:\n%s%s", args, out, errOut)
 		}
 	}
 }
