@@ -153,8 +153,9 @@ func blockLabel(b *doc.Block) string {
 }
 
 // boundaries returns the chunk start lines: the first body line, then every
-// heading and every executable-block fence, in document order. Each heading
-// chunk ends right after the heading line — a synthetic boundary starts the
+// heading and every executable-block fence, in document order. Every heading
+// gets a chunk, so the outline has a mark for each. Each heading chunk ends
+// right after the heading's last line — a synthetic boundary starts the
 // section's content as its own chunk, which the separator blanks before, so
 // every heading is followed by an empty line in the rendered output. A
 // boundary after each block's closing fence keeps following prose out of the
@@ -168,10 +169,9 @@ func boundaries(d *doc.Document) []boundary {
 	}
 	add(boundary{line: d.BodyLine, heading: -1, block: -1})
 	for i, h := range d.Headings {
-		if h.Line > 0 {
-			add(boundary{line: h.Line, heading: i, block: -1})
-			add(boundary{line: h.Line + 1, heading: -1, block: -1})
-		}
+		end := max(h.EndLine, h.Line) // a setext heading includes its underline
+		add(boundary{line: h.Line, heading: i, block: -1})
+		add(boundary{line: end + 1, heading: -1, block: -1})
 	}
 	for i, b := range d.Blocks {
 		add(boundary{line: b.Line, heading: -1, block: i})
