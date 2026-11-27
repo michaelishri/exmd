@@ -72,8 +72,8 @@ func collect(src []byte, starts []int, d *Document, res *Result) {
 		}
 		switch t := n.(type) {
 		case *ast.Heading:
-			if h := collectHeading(t, src, starts); h != nil {
-				d.Headings = append(d.Headings, h)
+			if _, topLevel := t.Parent().(*ast.Document); topLevel {
+				d.Headings = append(d.Headings, collectHeading(t, src, starts))
 			}
 		case *ast.FencedCodeBlock:
 			if b, diags := collectBlock(t, src, starts, d.Dir); b != nil {
@@ -93,9 +93,18 @@ func collect(src []byte, starts []int, d *Document, res *Result) {
 	}
 }
 
+// collectHeading records a heading's text and the source lines it spans.
+// An ATX heading (`# Title`) is one line, even when empty; a setext heading
+// (`Title` over `=====`) runs from its first text line to its underline.
 func collectHeading(h *ast.Heading, src []byte, starts []int) *Heading {
 	segs := h.Lines()
 	hd := &Heading{Level: h.Level}
+	if pos := h.Pos(); pos >= 0 {
+		hd.Line = lineOf(starts, pos)
+	} else if segs.Len() > 0 {
+		hd.Line = lineOf(starts, segs.At(0).Start)
+	}
+	hd.EndLine = hd.Line
 	if segs.Len() == 0 {
 		return hd
 	}
@@ -105,6 +114,17 @@ func collectHeading(h *ast.Heading, src []byte, starts []int) *Heading {
 		sb.Write(seg.Value(src))
 	}
 	hd.Text = strings.Join(strings.Fields(sb.String()), " ")
-	hd.Line = lineOf(starts, segs.At(0).Start)
+	if !isATX(src, starts, hd.Line) {
+		hd.EndLine = lineOf(starts, segs.At(segs.Len()-1).Start) + 1
+	}
 	return hd
+}
+
+// isATX reports whether the source line starts with `#` after indentation.
+func isATX(src []byte, starts []int, line int) bool {
+	if line < 1 || line > len(starts) {
+		return false
+	}
+	rest := bytes.TrimLeft(src[starts[line-1]:], " \t")
+	return len(rest) > 0 && rest[0] == '#'
 }

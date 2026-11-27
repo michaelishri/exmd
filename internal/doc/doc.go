@@ -40,11 +40,14 @@ type Block struct {
 	EndLine    int    // 1-based line of the closing fence (one past the last body line when unclosed)
 }
 
-// Heading is a Markdown heading, used for the document outline.
+// Heading is a top-level Markdown heading, used for the document outline.
+// Headings inside block quotes or list items belong to that container and
+// are not sections of the document.
 type Heading struct {
-	Level int // 1..6
-	Text  string
-	Line  int // 1-based source line
+	Level   int // 1..6
+	Text    string
+	Line    int // 1-based source line where the heading starts
+	EndLine int // 1-based last source line: the underline of a setext heading
 }
 
 // Document is a parsed, validated document (SPEC.md §2).

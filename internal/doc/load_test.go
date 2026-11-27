@@ -277,3 +277,31 @@ func TestScriptResolution(t *testing.T) {
 		t.Fatalf("expected missing file")
 	}
 }
+
+// TestHeadingLines covers the source span of each heading form, and keeps
+// headings inside containers out of the document outline.
+func TestHeadingLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.md")
+	src := "---\ntype: runbook\n---\n# ATX\n\nSetext\n======\n\nTwo\nlines\n---\n\n#\n\n> ## Quoted\n\n- ## Listed\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Heading{
+		{Level: 1, Text: "ATX", Line: 4, EndLine: 4},
+		{Level: 1, Text: "Setext", Line: 6, EndLine: 7},
+		{Level: 2, Text: "Two lines", Line: 9, EndLine: 11},
+		{Level: 1, Text: "", Line: 13, EndLine: 13},
+	}
+	if len(res.Doc.Headings) != len(want) {
+		t.Fatalf("headings = %d, want %d", len(res.Doc.Headings), len(want))
+	}
+	for i, h := range res.Doc.Headings {
+		if *h != want[i] {
+			t.Errorf("heading %d = %+v, want %+v", i, *h, want[i])
+		}
+	}
+}

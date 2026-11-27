@@ -83,17 +83,21 @@ func headingNumbers(d *doc.Document) []string {
 // (hashes), text, and optional closing hashes.
 var atxHeading = regexp.MustCompile(`^(\s*#{1,6}\s+)(.*?)(\s*#+\s*)?$`)
 
-// prefixHeadingNumber inserts a generated number into an ATX heading's
-// render chunk. The document source is never changed.
+// prefixHeadingNumber inserts a generated number into a heading's render
+// chunk: after the hashes of an ATX heading, or before the first text line of
+// a setext heading. The document source is never changed.
 func prefixHeadingNumber(chunk, number string) string {
 	if number == "" {
 		return chunk
 	}
 	lines := strings.Split(chunk, "\n")
-	m := atxHeading.FindStringSubmatch(lines[0])
-	if m == nil {
-		return chunk
+	if m := atxHeading.FindStringSubmatch(lines[0]); m != nil {
+		lines[0] = m[1] + number + " " + m[2] + m[3]
+	} else {
+		// Escape the dots: "1. Sub" on its own line would start a list.
+		text := strings.TrimLeft(lines[0], " ")
+		escaped := strings.ReplaceAll(number, ".", "\\.")
+		lines[0] = lines[0][:len(lines[0])-len(text)] + escaped + " " + text
 	}
-	lines[0] = m[1] + number + " " + m[2] + m[3]
 	return strings.Join(lines, "\n")
 }
