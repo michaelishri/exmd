@@ -201,3 +201,21 @@ func TestPythonImportsBesideSource(t *testing.T) {
 		t.Fatalf("stdout = %q", out)
 	}
 }
+
+// TestEveryLanguageHasAnAdapter keeps the language list and the adapters in
+// step: every language pre-flight accepts can run.
+func TestEveryLanguageHasAnAdapter(t *testing.T) {
+	for _, lang := range []string{"bash", "python3", "python"} {
+		bin, ok := doc.Interpreter(lang)
+		if !ok {
+			t.Fatalf("%s: not a known language", lang)
+		}
+		a, ok := Lookup(lang)
+		if !ok || a.Bin != bin {
+			t.Fatalf("%s: adapter %+v, want interpreter %s", lang, a, bin)
+		}
+	}
+	if _, ok := Lookup("ruby"); ok {
+		t.Fatal("ruby has an adapter")
+	}
+}
