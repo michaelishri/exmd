@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -73,5 +74,47 @@ func TestKeysBeforeLayoutAreSafe(t *testing.T) {
 				m.Update(k)
 			}()
 		}
+	}
+}
+
+// TestQuitWhileRunOutlivesGrace: when a stopped block outlives the shutdown
+// grace, quitting must not touch the state the engine goroutine still owns
+// (run with -race).
+func TestQuitWhileRunOutlivesGrace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	old := shutdownGrace
+	shutdownGrace = 100 * time.Millisecond
+	defer func() { shutdownGrace = old }()
+
+	path := filepath.Join(t.TempDir(), "doc.md")
+	src := "---\ntype: runbook\n---\n# T\n\n```bash:exec\ntrap '' TERM\nsleep 3\n```\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := newViewerFromDoc(t, 120, 40, path, nil)
+	m.blockSel = 0
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatal("run did not start")
+	}
+	for _, c := range batch {
+		go func(c tea.Cmd) { _ = c() }(c)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	st := m.stateFor(0)
+	m.shutdownInline()
+	if st.active || st.err == nil || !strings.Contains(st.err.Error(), "interrupted") {
+		t.Fatalf("run not marked interrupted: active=%v err=%v", st.active, st.err)
+	}
+	if m.inlineSession != nil {
+		t.Fatal("session still attached after shutdown")
+	}
+	select {
+	case <-st.finished:
+	case <-time.After(6 * time.Second):
+		t.Fatal("engine never finished the killed block")
 	}
 }

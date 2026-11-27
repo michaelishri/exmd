@@ -57,7 +57,7 @@ type inlineState struct {
 // shutdownGrace bounds how long shutdown waits for a cancelled run. The
 // engine's worst case is two grace periods (SIGTERM, then SIGKILL) plus the
 // harvest, so this is deliberately generous.
-const shutdownGrace = 5 * time.Second
+var shutdownGrace = 5 * time.Second
 
 // shutdownInline cancels in-flight runs and waits for them to finish before
 // closing the session: a Session is not safe for concurrent use. Any run still
@@ -76,41 +76,48 @@ func (m *Model) shutdownInline() {
 			active = append(active, index)
 		}
 	}
+	stillRunning := false
 	for _, index := range active {
 		st := m.inline[index]
-		waitInline(st, shutdownGrace)
+		finished := waitInline(st, shutdownGrace)
 		if !st.active {
 			continue // finalized through the normal event pipeline
 		}
-		if st.result != nil {
+		if finished && st.result != nil {
 			m.finalizeInline(index, st.result)
-		} else {
-			st.active = false
-			st.done = true
-			st.err = errors.New("run interrupted on exit")
+			continue
 		}
+		// An unfinished run still owns st.result and the session; leave
+		// both alone rather than race the engine goroutine.
+		stillRunning = stillRunning || !finished
+		st.active = false
+		st.done = true
+		st.err = errors.New("run interrupted on exit")
 	}
 	if m.inlineSession != nil {
-		m.inlineSession.Close()
+		if !stillRunning {
+			m.inlineSession.Close()
+		}
 		m.inlineSession = nil
 	}
 }
 
 // waitInline waits for a run to return, draining its event channel so a full
-// buffer cannot block the engine before it exits.
-func waitInline(st *inlineState, timeout time.Duration) {
+// buffer cannot block the engine before it exits. It reports whether the run
+// finished within the timeout.
+func waitInline(st *inlineState, timeout time.Duration) bool {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	for {
 		select {
 		case <-st.finished:
-			return
+			return true
 		case _, ok := <-st.ch:
 			if !ok {
 				st.ch = nil
 			}
 		case <-timer.C:
-			return
+			return false
 		}
 	}
 }
