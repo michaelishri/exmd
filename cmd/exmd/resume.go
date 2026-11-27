@@ -138,6 +138,8 @@ func cmdResume(args []string) int {
 	if res == nil {
 		return code
 	}
+	// Pre-flight runs before anything can execute (SPEC.md §5.3).
+	res.Preflight()
 	res.Sort()
 	printDiagnostics(res)
 	if res.HasErrors() {

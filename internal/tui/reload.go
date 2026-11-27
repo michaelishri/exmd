@@ -21,6 +21,9 @@ func (m *Model) reloadDocument() {
 		m.flash = "reload failed: " + err.Error()
 		return
 	}
+	// Pre-flight runs again: a script or interpreter may have gone away
+	// since the document was opened (SPEC.md §5.3).
+	res.Preflight()
 	if res.HasErrors() {
 		errs, _ := res.Counts()
 		m.flash = fmt.Sprintf("reload failed: %d error(s) in document", errs)
@@ -36,6 +39,10 @@ func (m *Model) reloadDocument() {
 	}
 
 	m.captureSnapshot()
+	if m.snap == nil {
+		m.flash = "reload failed: cannot read the document's scripts"
+		return
+	}
 	plan, err := m.snap.Plan(res.Doc, m.overrides)
 	if err != nil {
 		m.flash = "reload failed: " + err.Error()
