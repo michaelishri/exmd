@@ -50,7 +50,11 @@ __mdexec_is_exit() {
 # __mdexec_print_exit prints the block's EXIT handler the way `trap -p` does.
 __mdexec_print_exit() {
   if [ -n "$__mdexec_user_exit" ]; then
-    builtin printf "trap -- '%s' EXIT\n" "${__mdexec_user_exit//\'/\'\\\'\'}"
+    # Quote as `trap -p` does: ' becomes '\''. The pattern and replacement
+    # live in variables because bash 3.2 and 4+ treat quotes inside
+    # ${var//pat/rep} differently.
+    local __mdexec_sq="'" __mdexec_esc="'\\''"
+    builtin printf "trap -- '%s' EXIT\n" "${__mdexec_user_exit//$__mdexec_sq/$__mdexec_esc}"
   fi
 }
 
