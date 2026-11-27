@@ -67,6 +67,7 @@ type Model struct {
 
 	overrides map[string]string
 	theme     theme.Theme
+	styles    styles // derived from theme
 
 	// blockSel is the executable block highlighted in the text area
 	// (index into the document's blocks); -1 when block selection is off.
@@ -134,6 +135,7 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 		focus:     focusContent,
 		overrides: overrides,
 		theme:     t,
+		styles:    newStyles(t),
 		blockSel:  -1,
 		inline:    map[int]*inlineState{},
 
@@ -930,9 +932,9 @@ func (m Model) rightPaneView() string {
 	}
 
 	rows := strings.Split(m.outlineView(), "\n")
-	pathStyle := rowMutedStyle
+	pathStyle := m.styles.rowMuted
 	if m.focus == focusOutline {
-		pathStyle = rowStyle
+		pathStyle = m.styles.row
 	}
 	path := "  " + ansi.Truncate(termsafe.Visible(m.doc.Path), max(1, m.outline.width-3), "…")
 	blank := pathStyle.Width(m.outline.width).Render("")
@@ -1034,13 +1036,13 @@ func (m Model) railView() string {
 	// takes precedence when the two overlap.
 	if m.blockSel >= 0 && m.blockSel < len(m.out.Blocks) {
 		start, end := blockRows(m.blockSel)
-		mark(start, end, gutterBarStyle)
+		mark(start, end, m.styles.gutterBar)
 	} else if m.outline.sel >= 0 && m.outline.sel < len(m.outline.entries) {
 		// The heading's rendered line index (0-based in out.Lines) as a
 		// pane row: the jump scrolls to renderLine-1, and the pane's top
 		// padding row shifts it one further.
 		r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset + 1
-		mark(r, r+1, gutterBarStyle)
+		mark(r, r+1, m.styles.gutterBar)
 	}
 
 	// Every executed block keeps its status bar while the reader moves.
@@ -1048,23 +1050,23 @@ func (m Model) railView() string {
 		if st == nil || !m.validBlock(index) || (!st.active && !st.done) {
 			continue
 		}
-		style := railDoneStyle
+		style := m.styles.railDone
 		switch {
 		case st.active:
-			style = railRunStyle
+			style = m.styles.railRun
 		case st.err != nil || st.status != 0:
-			style = railFailStyle
+			style = m.styles.railFail
 		}
 		if index == m.blockSel {
 			// Brighten the status hue on the block holding the cursor so
 			// it stays visible among other executed blocks.
 			switch {
 			case st.active:
-				style = railRunActiveStyle
+				style = m.styles.railRunActive
 			case st.err != nil || st.status != 0:
-				style = railFailActiveStyle
+				style = m.styles.railFailActive
 			default:
-				style = railDoneActiveStyle
+				style = m.styles.railDoneActive
 			}
 		}
 		start, end := blockRows(index)
@@ -1187,7 +1189,7 @@ func (m Model) displayLine(line int) int {
 }
 
 func (m Model) outlineView() string {
-	return m.outline.view(m.paneHeight, m.focus == focusOutline)
+	return m.outline.view(m.paneHeight, m.focus == focusOutline, m.styles)
 }
 
 // composeLeftRight joins a left and right segment on one row, truncating the

@@ -80,9 +80,11 @@ in shared plumbing (registry, reset handling, adjustment), not in the palettes.
 
 ### 6. Runtime switching updates every layer
 
-`applyTheme` in `internal/tui/settings.go` must: call `SetTheme(th)` (rebuilds
-global lipgloss styles), set `m.theme = th`, then `m.relayout()` (re-renders
-content, inline boxes, outline and footer). Passing a `color bool` instead of a
+`applyTheme` in `internal/tui/settings.go` must: set `m.theme = th` and
+`m.styles = newStyles(th)` (the viewer's own lipgloss styles), then
+`m.relayout()` (re-renders content, inline boxes, outline and footer).
+`SetTheme` only sets the theme new viewers start with; it never restyles a
+running one. Inline output rows are cached per theme (`boxTheme`). Passing a `color bool` instead of a
 theme anywhere will freeze part of the UI on the old palette.
 
 ### 7. Derived surfaces need measured foregrounds

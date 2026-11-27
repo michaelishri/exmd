@@ -346,7 +346,7 @@ func (m *Model) rebuildInlineBox(index int) {
 	}
 
 	lines := make([]string, 0, len(st.rendered)+4)
-	lines = append(lines, " "+execEdgeStyle.Render(strings.Repeat("─", max(0, w-1))))
+	lines = append(lines, " "+m.styles.execEdge.Render(strings.Repeat("─", max(0, w-1))))
 	if st.dropped > 0 {
 		lines = append(lines, row(muted, fmt.Sprintf("… %d earlier line(s) not shown", st.dropped)))
 	}

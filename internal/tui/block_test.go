@@ -180,7 +180,7 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = mm.(Model)
 	// While running, the gutter bar is orange.
-	if !strings.Contains(got.View(), railRunActiveStyle.Render("▌")) {
+	if !strings.Contains(got.View(), got.styles.railRunActive.Render("▌")) {
 		t.Fatal("running block's rail should be bright orange")
 	}
 	got = pump(t, got, cmd)
@@ -231,7 +231,7 @@ func TestRunSelectedBlockInline(t *testing.T) {
 		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
 	}
 	// On success, the rail turns green.
-	if !strings.Contains(got.View(), railDoneActiveStyle.Render("▌")) {
+	if !strings.Contains(got.View(), got.styles.railDoneActive.Render("▌")) {
 		t.Fatal("successful block's rail should be bright green")
 	}
 
@@ -242,12 +242,12 @@ func TestRunSelectedBlockInline(t *testing.T) {
 	if !strings.Contains(strings.Join(got.contentLines(), "\n"), "author:  Michael Ishri") {
 		t.Fatal("output disappeared when moving to another block")
 	}
-	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
+	if !strings.Contains(got.View(), got.styles.railDone.Render("▌")) {
 		t.Fatal("status bar disappeared when moving to another block")
 	}
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	got = mm.(Model)
-	if !strings.Contains(got.View(), railDoneStyle.Render("▌")) {
+	if !strings.Contains(got.View(), got.styles.railDone.Render("▌")) {
 		t.Fatal("status bar disappeared when returning to heading selection")
 	}
 }
@@ -285,9 +285,9 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 	// display positions (after the earlier box is accounted for).
 	viewLines := strings.Split(got.View(), "\n")
 	for _, index := range []int{0, 1} {
-		wantStyle := railDoneStyle
+		wantStyle := got.styles.railDone
 		if index == got.blockSel {
-			wantStyle = railDoneActiveStyle
+			wantStyle = got.styles.railDoneActive
 		}
 		bm := got.out.Blocks[index]
 		start := got.displayLine(bm.Line+1) - got.content.YOffset + 1
@@ -396,7 +396,7 @@ func TestInlineFailureRailTurnsRed(t *testing.T) {
 	if got.inline[1].status == 0 {
 		t.Fatalf("expected a failing block, status = %d", got.inline[1].status)
 	}
-	if !strings.Contains(got.View(), railFailActiveStyle.Render("▌")) {
+	if !strings.Contains(got.View(), got.styles.railFailActive.Render("▌")) {
 		t.Fatal("failed block's rail should be bright red")
 	}
 }
