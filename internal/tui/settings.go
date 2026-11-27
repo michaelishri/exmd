@@ -111,7 +111,10 @@ func (m *Model) commitTheme() {
 	th := m.settings.themes[m.settings.cursor]
 	m.settings.open = false
 	m.applyTheme(th)
-	if err := saveConfig(config.Config{Theme: th.Name}); err != nil {
+	// Keep every other saved preference: only the theme changes here.
+	cfg, _ := config.Load()
+	cfg.Theme = th.Name
+	if err := saveConfig(cfg); err != nil {
 		m.flash = "theme kept for this session: " + err.Error()
 	} else {
 		m.flash = "theme set to " + th.Name

@@ -53,3 +53,36 @@ func TestLoadMalformed(t *testing.T) {
 		t.Fatal("Load accepted malformed YAML")
 	}
 }
+
+func TestSessionsEnabled(t *testing.T) {
+	off, on := false, true
+	for _, tc := range []struct {
+		yaml string
+		want bool
+	}{
+		{"", true},
+		{"theme: dark\n", true},
+		{"save_sessions: true\n", true},
+		{"save_sessions: false\n", false},
+	} {
+		dir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", dir)
+		path := filepath.Join(dir, "exmd", "config.yaml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(tc.yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		c, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := c.SessionsEnabled(); got != tc.want {
+			t.Errorf("%q: SessionsEnabled = %v, want %v", tc.yaml, got, tc.want)
+		}
+	}
+	if !(Config{SaveSessions: &on}).SessionsEnabled() || (Config{SaveSessions: &off}).SessionsEnabled() {
+		t.Error("explicit values not honoured")
+	}
+}

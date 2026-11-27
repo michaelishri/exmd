@@ -15,6 +15,15 @@ import (
 // Config is the on-disk preference set.
 type Config struct {
 	Theme string `yaml:"theme,omitempty"`
+
+	// SaveSessions turns automatic session snapshots off when false. Unset
+	// means on.
+	SaveSessions *bool `yaml:"save_sessions,omitempty"`
+}
+
+// SessionsEnabled reports whether the viewer should save sessions.
+func (c Config) SessionsEnabled() bool {
+	return c.SaveSessions == nil || *c.SaveSessions
 }
 
 // Path returns the config file location. XDG_CONFIG_HOME wins when set;

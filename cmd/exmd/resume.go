@@ -10,7 +10,7 @@ import (
 	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
-const resumeUsage = `exmd DOC --resume [--set KEY=VALUE]... [--theme auto|dark|notty]
+const resumeUsage = `exmd DOC --resume [--set KEY=VALUE]... [--theme NAME] [--no-session]
                      reopen the last saved session for DOC (--resume may precede DOC)
 exmd --resume --list list saved sessions
 exmd --resume --prune
@@ -72,6 +72,7 @@ func cmdResume(args []string) int {
 	args, doClear := extractBool(args, "--clear")
 	args, doList := extractBool(args, "--list")
 	args, doPrune := extractBool(args, "--prune")
+	args, noSession := extractBool(args, "--no-session")
 	themeName, args, err := parseTheme(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
@@ -122,23 +123,18 @@ func cmdResume(args []string) int {
 		return 2
 	}
 
-	res, code := loadDoc(path)
-	if res == nil {
+	if _, code := applyInvocationTheme(themeName); code != 0 {
 		return code
 	}
-	// Pre-flight runs before anything can execute (SPEC.md §5.3).
-	res.Preflight()
-	res.Sort()
-	printDiagnostics(res)
-	if res.HasErrors() {
-		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
-		return 2
+	res, code := loadForViewer(path)
+	if res == nil {
+		return code
 	}
 	if err := snap.Validate(res.Doc, sets.toMap()); err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: cannot resume %s: %v\n", path, err)
 		return 2
 	}
-	return launchTUI(res, sets.toMap(), themeName, snap)
+	return launchTUI(res, sets.toMap(), snap, !noSession)
 }
 
 // listSessions prints the saved sessions. Files that cannot be read are

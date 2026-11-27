@@ -195,6 +195,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	// Show the separator immediately, before the first output event.
 	m.rebuildInlineBox(index)
 	m.setContent()
+	m.sessionStarted = true
 	m.saveSession() // record that this run is active
 
 	ch := make(chan exec.Event, eventChanBuffer)

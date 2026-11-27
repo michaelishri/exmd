@@ -83,6 +83,14 @@ type Model struct {
 	resuming      bool
 	lastSave      time.Time
 
+	// saveEnabled turns session saving off (--no-session). sessionStarted
+	// becomes true once there is something worth saving — a resumed
+	// session or a first run — so merely opening and quitting a document
+	// never replaces the session saved for it.
+	saveEnabled    bool
+	sessionStarted bool
+	saved          bool
+
 	// blockKeys maps document block indices to stable content identities.
 	blockKeys []string
 	// engineBusy is true while a run goroutine owns inlineSession. State is
@@ -124,6 +132,8 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 		theme:     t,
 		blockSel:  -1,
 		inline:    map[int]*inlineState{},
+
+		saveEnabled: true,
 	}
 	m.content.MouseWheelEnabled = true
 	if s, err := session.New(res.Doc, overrides); err == nil {
@@ -147,6 +157,7 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 		}
 	}
 	m.resuming = true
+	m.sessionStarted = true
 	m.restoredState = plan.State
 	m.blockSel = plan.BlockSel
 	interrupted := applyRestore(&m, plan)
@@ -199,6 +210,23 @@ func resumeSummary(changed, stale, interrupted int) string {
 	}
 	return strings.Join(parts, " — ")
 }
+
+// WithoutSessionSaving returns the model with session saving turned off: the
+// viewer works as usual but never writes a snapshot.
+func (m Model) WithoutSessionSaving() Model {
+	m.saveEnabled = false
+	return m
+}
+
+// WithNotice returns the model with a message shown in the footer until the
+// first key press.
+func (m Model) WithNotice(text string) Model {
+	m.flash = text
+	return m
+}
+
+// SessionSaved reports whether the viewer wrote a session snapshot.
+func (m Model) SessionSaved() bool { return m.saved }
 
 func cloneStringMap(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m))
