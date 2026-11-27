@@ -318,7 +318,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	// consumes this key may set a fresh one (notably `c` below).
 	m.flash = ""
 	if m.settings.open {
-		return m.handleSettingsKey(msg)
+		if cmd, handled := m.handleSettingsKey(msg); handled {
+			return cmd, true
+		}
+		// Keys the panel passes through (ctrl+c) keep their global meaning.
+		return m.handleGlobalKey(msg)
 	}
 	if cmd, handled := m.handleGlobalKey(msg); handled {
 		return cmd, true
@@ -517,6 +521,9 @@ func (m *Model) handleOutlineKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 // handleBlockKey walks executable blocks, or scrolls the content when no
 // block is selected.
 func (m *Model) handleBlockKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if m.out == nil {
+		return nil, false // not laid out yet: there are no blocks to walk
+	}
 	if m.blockSel >= 0 {
 		switch msg.String() {
 		case "enter":
