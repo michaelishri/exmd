@@ -13,13 +13,15 @@ import (
 const resumeUsage = `exmd DOC --resume [--set KEY=VALUE]... [--theme auto|dark|notty]
                      reopen the last saved session for DOC (--resume may precede DOC)
 exmd --resume --list list saved sessions
+exmd --resume --prune
+                     remove sessions that can no longer be resumed
 exmd DOC --resume --clear
                      discard a saved session
 
 A resume replays saved globals and block outputs into a fresh run. --set
 overrides must match the saved ones. Edited executable blocks start fresh and
 later outputs are marked stale; a v1 snapshot must be cleared with
-\"exmd DOC --resume --clear\".`
+"exmd DOC --resume --clear".`
 
 // extractBool removes a stand-alone boolean flag from args and reports
 // whether it appeared. Flags may appear in any position.
@@ -69,6 +71,7 @@ func cmdResume(args []string) int {
 	}
 	args, doClear := extractBool(args, "--clear")
 	args, doList := extractBool(args, "--list")
+	args, doPrune := extractBool(args, "--prune")
 	themeName, args, err := parseTheme(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
@@ -84,30 +87,15 @@ func cmdResume(args []string) int {
 		return 2
 	}
 
-	if doList {
-		if doClear || len(positional) != 0 {
+	if doList || doPrune {
+		if doList == doPrune || doClear || len(positional) != 0 {
 			fmt.Fprintln(os.Stderr, resumeUsage)
 			return 2
 		}
-		snaps, err := session.List()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
-			return 2
+		if doPrune {
+			return pruneSessions()
 		}
-		if len(snaps) == 0 {
-			fmt.Println("no saved sessions")
-			return 0
-		}
-		rows := make([][]string, 0, len(snaps))
-		for _, s := range snaps {
-			rows = append(rows, []string{
-				termsafe.Visible(s.DocPath),
-				s.UpdatedAt.Local().Format("2006-01-02 15:04"),
-				fmt.Sprintf("%d", len(s.Blocks)),
-			})
-		}
-		printTable([]string{"DOCUMENT", "SAVED", "BLOCKS"}, rows)
-		return 0
+		return listSessions()
 	}
 
 	if len(positional) != 1 {
@@ -151,4 +139,63 @@ func cmdResume(args []string) int {
 		return 2
 	}
 	return launchTUI(res, sets.toMap(), themeName, snap)
+}
+
+// listSessions prints the saved sessions. Files that cannot be read are
+// reported on stderr with their path instead of hiding the others.
+func listSessions() int {
+	entries, err := session.List()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
+		return 2
+	}
+	if len(entries) == 0 {
+		fmt.Println("no saved sessions")
+		return 0
+	}
+	var rows [][]string
+	for _, e := range entries {
+		if e.Err != nil {
+			fmt.Fprintf(os.Stderr, "exmd: skipping %s: %v\n", termsafe.Visible(e.File), termsafe.Visible(e.Err.Error()))
+			continue
+		}
+		s := e.Snapshot
+		docPath := termsafe.Visible(s.DocPath)
+		if _, err := os.Stat(s.DocPath); err != nil {
+			docPath += " (missing)"
+		}
+		rows = append(rows, []string{
+			docPath,
+			s.UpdatedAt.Local().Format("2006-01-02 15:04"),
+			fmt.Sprintf("%d", len(s.Blocks)),
+		})
+	}
+	if len(rows) > 0 {
+		printTable([]string{"DOCUMENT", "SAVED", "BLOCKS"}, rows)
+	}
+	if len(rows) < len(entries) {
+		fmt.Fprintln(os.Stderr, "exmd: remove unreadable sessions with `exmd --resume --prune`")
+	}
+	return 0
+}
+
+// pruneSessions removes snapshots that are unreadable, unsupported, or whose
+// document no longer exists.
+func pruneSessions() int {
+	removed, err := session.Prune()
+	for _, e := range removed {
+		what := termsafe.Visible(e.File)
+		if e.Snapshot != nil {
+			what = termsafe.Visible(e.Snapshot.DocPath) + " (document missing)"
+		}
+		fmt.Printf("removed %s\n", what)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
+		return 2
+	}
+	if len(removed) == 0 {
+		fmt.Println("nothing to prune")
+	}
+	return 0
 }

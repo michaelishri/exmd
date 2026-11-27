@@ -60,7 +60,7 @@ func ValidateState(d *doc.Document, st SessionState) error {
 			return fmt.Errorf("global %q is not declared", name)
 		}
 		if seen[name] {
-			return fmt.Errorf("global %q is both present and absent", name)
+			return fmt.Errorf("global %q is listed as absent twice", name)
 		}
 		seen[name] = true
 	}

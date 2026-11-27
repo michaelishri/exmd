@@ -28,6 +28,7 @@ Usage:
                                     open a runbook in the TUI (backtick selects blocks, enter runs, r reloads, c copies output, esc stops, , settings);
                                     --resume restores the last saved session for DOC
   exmd --resume --list               list saved sessions
+  exmd --resume --prune              remove sessions that can no longer be resumed
   exmd DOC --resume --clear          discard a saved session
   exmd check DOC                 validate; report all diagnostics at once
   exmd list DOC                  enumerate executable blocks

@@ -119,17 +119,21 @@ func TestNewSessionFromStateRejectsInvalidState(t *testing.T) {
 	d := loadFlow(t)
 	base := SessionState{Next: 1}
 	for _, tc := range []struct {
-		name string
-		edit func(*SessionState)
+		name    string
+		edit    func(*SessionState)
+		wantErr string
 	}{
-		{"next past end", func(s *SessionState) { s.Next = 99 }},
-		{"negative next", func(s *SessionState) { s.Next = -1 }},
-		{"undeclared global", func(s *SessionState) { s.Globals = map[string]string{"NOPE": "x"} }},
-		{"undeclared absent", func(s *SessionState) { s.Absent = []string{"NOPE"} }},
+		{"next past end", func(s *SessionState) { s.Next = 99 }, ""},
+		{"negative next", func(s *SessionState) { s.Next = -1 }, ""},
+		{"undeclared global", func(s *SessionState) { s.Globals = map[string]string{"NOPE": "x"} }, ""},
+		{"undeclared absent", func(s *SessionState) { s.Absent = []string{"NOPE"} }, ""},
 		{"both present and absent", func(s *SessionState) {
 			s.Globals = map[string]string{"GREETING": "x"}
 			s.Absent = []string{"GREETING"}
-		}},
+		}, "both present and absent"},
+		{"absent twice", func(s *SessionState) {
+			s.Absent = []string{"GREETING", "GREETING"}
+		}, "listed as absent twice"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := base
@@ -139,6 +143,9 @@ func TestNewSessionFromStateRejectsInvalidState(t *testing.T) {
 			if err == nil {
 				s.Close()
 				t.Fatal("invalid state accepted")
+			}
+			if tc.wantErr != "" && !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
 			}
 		})
 	}

@@ -280,8 +280,8 @@ func TestDeleteAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 {
-		t.Fatalf("List returned %d snapshots, want 2", len(list))
+	if len(list) != 2 || list[0].Err != nil || list[1].Err != nil {
+		t.Fatalf("List returned %+v, want 2 readable snapshots", list)
 	}
 	if err := Delete(paths[0]); err != nil {
 		t.Fatal(err)
@@ -313,5 +313,106 @@ func TestStateConversion(t *testing.T) {
 	}
 	if st.Globals["TOKEN"] != "default" {
 		t.Fatalf("default global lost: %+v", st.Globals)
+	}
+}
+
+// TestListToleratesBadFiles: one corrupt or old snapshot must not hide the
+// others; it is listed last with its error and file path.
+func TestListToleratesBadFiles(t *testing.T) {
+	isolate(t)
+	good := writeDoc(t, flowSource)
+	s, err := New(load(t, good), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(good, s); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := Dir()
+	for name, body := range map[string]string{
+		"aaa-corrupt.yaml": "version: [",
+		"bbb-v1.yaml":      "version: 1\ndoc_path: /x.md\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 3 {
+		t.Fatalf("List returned %d entries, want 3", len(list))
+	}
+	if list[0].Err != nil || list[0].Snapshot == nil {
+		t.Fatalf("readable snapshot should come first: %+v", list[0])
+	}
+	for _, e := range list[1:] {
+		if e.Err == nil || e.Snapshot != nil || !strings.HasPrefix(e.File, dir) {
+			t.Fatalf("bad file entry = %+v", e)
+		}
+	}
+}
+
+// TestPruneRemovesUnresumableSnapshots keeps snapshots of documents that
+// still exist and removes broken ones and orphans.
+func TestPruneRemovesUnresumableSnapshots(t *testing.T) {
+	isolate(t)
+	keep, gone := writeDoc(t, flowSource), writeDoc(t, flowSource)
+	for _, p := range []string{keep, gone} {
+		s, err := New(load(t, p), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Save(p, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := Dir()
+	if err := os.WriteFile(filepath.Join(dir, "corrupt.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := Prune()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("pruned %d, want 2", len(removed))
+	}
+	list, _ := List()
+	if len(list) != 1 || list[0].Snapshot == nil || list[0].Snapshot.DocPath != keep {
+		t.Fatalf("after prune: %+v", list)
+	}
+}
+
+// TestSnapshotDirIsPrivate: snapshots can hold secrets, so the directory is
+// created (or tightened) to 0700 and files are 0600.
+func TestSnapshotDirIsPrivate(t *testing.T) {
+	isolate(t)
+	dir, _ := Dir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := writeDoc(t, flowSource)
+	s, err := New(load(t, p), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(p, s); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("dir mode = %o, want 700", perm)
+	}
+	file, _ := Path(p)
+	if info, err = os.Stat(file); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("file mode = %v (%v), want 600", info.Mode().Perm(), err)
 	}
 }
