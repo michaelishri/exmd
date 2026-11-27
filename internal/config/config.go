@@ -26,17 +26,27 @@ func (c Config) SessionsEnabled() bool {
 	return c.SaveSessions == nil || *c.SaveSessions
 }
 
-// Path returns the config file location. XDG_CONFIG_HOME wins when set;
+// Dir returns the directory holding the tool's on-disk state: the config
+// file and saved sessions. XDG_CONFIG_HOME wins when set, on every platform;
 // otherwise os.UserConfigDir supplies the platform default.
-func Path() (string, error) {
-	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return filepath.Join(dir, "exmd", "config.yaml"), nil
+func Dir() (string, error) {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		var err error
+		if base, err = os.UserConfigDir(); err != nil {
+			return "", err
+		}
 	}
-	dir, err := os.UserConfigDir()
+	return filepath.Join(base, "exmd"), nil
+}
+
+// Path returns the config file location.
+func Path() (string, error) {
+	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "exmd", "config.yaml"), nil
+	return filepath.Join(dir, "config.yaml"), nil
 }
 
 // Load reads the config. A missing file is not an error: defaults apply.
@@ -59,7 +69,9 @@ func Load() (Config, error) {
 	return c, nil
 }
 
-// Save writes the config, creating its parent directory when needed.
+// Save writes the config atomically, creating its parent directory when
+// needed: a temporary file in the same directory is renamed into place, so
+// a crash cannot leave a half-written config.
 func Save(c Config) error {
 	path, err := Path()
 	if err != nil {
@@ -72,5 +84,21 @@ func Save(c Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
