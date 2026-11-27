@@ -215,3 +215,52 @@ func TestExtractBoolAndResume(t *testing.T) {
 		}
 	}
 }
+
+// TestResumeListAndPruneWithBadFiles: a corrupt snapshot is reported with
+// its path but does not hide good ones; --prune removes it and orphans.
+func TestResumeListAndPruneWithBadFiles(t *testing.T) {
+	path := setupResume(t)
+	dir, _ := session.Dir()
+	bad := filepath.Join(dir, "corrupt.yaml")
+	if err := os.WriteFile(bad, []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, errOut, code := runCaptured(t, "--resume", "--list")
+	if code != 0 {
+		t.Fatalf("--list exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, path) {
+		t.Errorf("good session missing from list:\n%s", out)
+	}
+	if !strings.Contains(errOut, bad) || !strings.Contains(errOut, "--prune") {
+		t.Errorf("bad file not reported with a fix:\n%s", errOut)
+	}
+
+	if code := run([]string{"--resume", "--prune", "--list"}); code != 2 {
+		t.Errorf("--prune --list = %d, want 2", code)
+	}
+	out, _, code = runCaptured(t, "--resume", "--prune")
+	if code != 0 || !strings.Contains(out, "removed "+bad) {
+		t.Fatalf("--prune exit %d:\n%s", code, out)
+	}
+	if _, err := os.Stat(bad); !os.IsNotExist(err) {
+		t.Fatalf("corrupt snapshot still present: %v", err)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ = runCaptured(t, "--resume", "--list")
+	if !strings.Contains(out, "(missing)") {
+		t.Errorf("orphaned session not marked missing:\n%s", out)
+	}
+	out, _, _ = runCaptured(t, "--resume", "--prune")
+	if !strings.Contains(out, "document missing") {
+		t.Errorf("orphan not pruned:\n%s", out)
+	}
+	out, _, _ = runCaptured(t, "--resume", "--prune")
+	if !strings.Contains(out, "nothing to prune") {
+		t.Errorf("second prune:\n%s", out)
+	}
+}

@@ -224,7 +224,7 @@ func Save(docPath string, s *Snapshot) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := ensureDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	s.UpdatedAt = time.Now().UTC()
@@ -265,8 +265,27 @@ func Delete(docPath string) error {
 	return err
 }
 
-// List returns all saved snapshots, newest first.
-func List() ([]*Snapshot, error) {
+// ensureDir creates the snapshot directory private to the user. Snapshots
+// hold globals and block output, which can include secrets, so an existing
+// directory with wider permissions is tightened too.
+func ensureDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o700)
+}
+
+// Entry is one snapshot file found by List. Err is set, and Snapshot nil,
+// when the file cannot be read or parsed; one bad file never hides the rest.
+type Entry struct {
+	File     string // absolute path of the snapshot file
+	Snapshot *Snapshot
+	Err      error
+}
+
+// List returns every saved snapshot file, readable ones newest first, then
+// unreadable ones by file name.
+func List() ([]Entry, error) {
 	dir, err := Dir()
 	if err != nil {
 		return nil, err
@@ -278,28 +297,58 @@ func List() ([]*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []*Snapshot
+	var out []Entry
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			return nil, err
+		file := filepath.Join(dir, e.Name())
+		ent := Entry{File: file}
+		data, err := os.ReadFile(file)
+		if err == nil {
+			ent.Snapshot, err = decode(data, file)
 		}
-		s, err := decode(data, e.Name())
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, s)
+		ent.Err = err
+		out = append(out, ent)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
-			return out[i].DocPath < out[j].DocPath
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].Snapshot, out[j].Snapshot
+		switch {
+		case a == nil || b == nil:
+			if (a == nil) != (b == nil) {
+				return a != nil
+			}
+			return out[i].File < out[j].File
+		case a.UpdatedAt.Equal(b.UpdatedAt):
+			return a.DocPath < b.DocPath
+		default:
+			return a.UpdatedAt.After(b.UpdatedAt)
 		}
-		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
 	return out, nil
+}
+
+// Prune removes snapshot files that can no longer be resumed: unreadable or
+// unsupported ones, and those whose document no longer exists. It returns
+// the entries it removed.
+func Prune() ([]Entry, error) {
+	entries, err := List()
+	if err != nil {
+		return nil, err
+	}
+	var removed []Entry
+	for _, e := range entries {
+		if e.Err == nil {
+			if _, statErr := os.Stat(e.Snapshot.DocPath); statErr == nil {
+				continue
+			}
+		}
+		if err := os.Remove(e.File); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return removed, err
+		}
+		removed = append(removed, e)
+	}
+	return removed, nil
 }
 
 // Validate checks that a snapshot can be safely replayed against the current
