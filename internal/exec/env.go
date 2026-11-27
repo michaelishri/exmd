@@ -14,6 +14,10 @@ var shellManaged = map[string]struct{}{
 	"_": {}, "OLDPWD": {}, "PWD": {}, "SHLVL": {},
 }
 
+// dumpEnd is the record each harness writes after its environment dump. A
+// dump without it was interrupted part-way and may hold a truncated value.
+const dumpEnd = "__MDEXEC_END="
+
 // sortedKeys returns a map's keys in a stable order.
 func sortedKeys[V any](m map[string]V) []string {
 	names := make([]string, 0, len(m))

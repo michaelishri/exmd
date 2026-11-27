@@ -345,12 +345,21 @@ func (s *Session) waitFor(ctx context.Context, cmd *osexec.Cmd, waitCh <-chan er
 // the delta applies even when the block failed (§4.7).
 func (s *Session) harvest(b *doc.Block, childEnv []string, envOut string, emit func(Event)) {
 	data, err := os.ReadFile(envOut)
-	if err != nil || len(data) == 0 {
-		// No usable dump (e.g. the block was killed or replaced its
-		// process): no delta.
+	var dump []string
+	if err == nil {
+		dump = parseEnv(data)
+	}
+	if n := len(dump); n == 0 || dump[n-1] != dumpEnd {
+		// No complete dump: no delta. A cancelled block is expected to
+		// leave none; otherwise the block replaced its process (`exec`,
+		// os._exit) or the harness was cut short, and silently losing
+		// its exports would be surprising.
+		if !s.blockKilled {
+			s.warn(emit, "block %d left no environment dump (it replaced or killed its own process); its exports were not harvested", b.Index)
+		}
 		return
 	}
-	set, removed := diffEnv(childEnv, parseEnv(data))
+	set, removed := diffEnv(childEnv, dump[:len(dump)-1])
 
 	for _, name := range sortedKeys(set) {
 		if _, managed := shellManaged[name]; managed {
