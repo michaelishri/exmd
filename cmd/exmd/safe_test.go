@@ -112,3 +112,27 @@ func TestOpenAndResumeRunPreflight(t *testing.T) {
 		}
 	}
 }
+
+// TestCLIFlagHandling pins small command-line behaviours: verbs answer
+// --help, --resume does not take over a verb, and --no-session is accepted.
+func TestCLIFlagHandling(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, verb := range []string{"check", "list"} {
+		out, _, code := runCaptured(t, verb, "--help")
+		if code != 0 || !strings.Contains(out, "usage: exmd "+verb) {
+			t.Errorf("%s --help: exit %d, out %q", verb, code, out)
+		}
+	}
+
+	_, errOut, code := runCaptured(t, "check", demo, "--resume")
+	if code != 2 || !strings.Contains(errOut, "usage: exmd check") {
+		t.Errorf("check DOC --resume: exit %d, stderr %q; want check's usage error", code, errOut)
+	}
+
+	for _, args := range [][]string{{demo, "--no-session"}, {"--no-session", demo, "--set", "JOB_NAME=x"}} {
+		_, errOut, code = runCaptured(t, args...)
+		if code != 2 || !strings.Contains(errOut, "needs an interactive terminal") {
+			t.Errorf("%v: exit %d, stderr %q; want to reach the terminal check", args, code, errOut)
+		}
+	}
+}

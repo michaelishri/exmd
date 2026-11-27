@@ -9,6 +9,11 @@ import (
 // environment-dependent pre-flight checks (SPEC.md §2.3). All diagnostics
 // are reported together; any error exits 2 with zero side effects.
 func cmdCheck(args []string) int {
+	args, help := extractHelp(args)
+	if help {
+		fmt.Println("usage: exmd check DOC")
+		return 0
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: exmd check DOC")
 		return 2
