@@ -7,8 +7,10 @@ and GitHub CLI authenticated with write access to `michaelishri/exmd`.
 ## Bump the version
 
 Choose the next application version. For example, for version `0.1.1`,
-set `const version = "0.1.1"` in [cmd/exmd/main.go](../cmd/exmd/main.go).
-The binary reports `0.1.1` and the Git tag is `v0.1.1`.
+set `var version = "0.1.1"` in [cmd/exmd/main.go](../cmd/exmd/main.go) so
+source builds report it too. The release build below also stamps the
+version with `-ldflags "-X main.version=$version"`, so the published
+binaries always report `0.1.1`, and the Git tag is `v0.1.1`.
 
 Commit the bump and land it on `main` with the changes you want to release.
 Start from a clean checkout of that commit. Replace the example version
@@ -44,7 +46,8 @@ for os in darwin linux; do
     asset="exmd-$os-$arch"
     mkdir "$release_dir/$asset"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-      go build -trimpath -o "$release_dir/$asset/exmd" ./cmd/exmd
+      go build -trimpath -ldflags "-X main.version=$version" \
+        -o "$release_dir/$asset/exmd" ./cmd/exmd
     tar -czf "$release_dir/$asset.tar.gz" -C "$release_dir/$asset" exmd
   done
 done

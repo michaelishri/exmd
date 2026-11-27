@@ -19,7 +19,10 @@ import (
 	"github.com/muesli/termenv"
 )
 
-const version = "0.6.2"
+// version is the application version. Release builds stamp it with
+// -ldflags "-X main.version=..." (docs/releasing.md), so a binary always
+// reports the tag it was built from.
+var version = "0.6.2"
 
 const usage = `exmd — executable Markdown (runbooks)
 
