@@ -64,11 +64,11 @@ func (m *Model) closeSettings() {
 	m.applyTheme(m.settings.original)
 }
 
-// applyTheme re-points every layer at th: the package-level lipgloss styles,
-// this model's theme, and the rendered document, outline and inline boxes.
+// applyTheme re-points every layer at th: this model's theme and styles,
+// and the rendered document, outline and inline boxes.
 func (m *Model) applyTheme(th theme.Theme) {
-	SetTheme(th)
 	m.theme = th
+	m.styles = newStyles(th)
 	m.relayout()
 }
 

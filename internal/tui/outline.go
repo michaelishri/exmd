@@ -152,7 +152,7 @@ const panePad = 1
 // whether or not the sidebar holds focus — focus is expressed by shading
 // alone. While the sidebar does not hold focus the strip rests on the panel
 // shade; focus lifts it to the raised element shade.
-func (o *outlineModel) view(height int, focused bool) string {
+func (o *outlineModel) view(height int, focused bool, st styles) string {
 	if !o.visible {
 		return ""
 	}
@@ -161,11 +161,11 @@ func (o *outlineModel) view(height int, focused bool) string {
 	// The strip's surfaces: the resting (muted) shades while unfocused,
 	// the full panel shades while focused. Selected rows always render on
 	// the primary background.
-	resting, bright := rowStyle, rowHiStyle
-	titleBg, emptyBg := sideTitleStyle, emptyStateStyle
+	resting, bright := st.row, st.rowHi
+	titleBg, emptyBg := st.sideTitle, st.emptyState
 	if !focused {
-		resting, bright = rowMutedStyle, rowHiMutedStyle
-		titleBg, emptyBg = sideTitleMutedStyle, emptyStateMutedStyle
+		resting, bright = st.rowMuted, st.rowHiMuted
+		titleBg, emptyBg = st.sideTitleMuted, st.emptyStateMuted
 	}
 
 	// The whole column is painted; the bottom row stays blank.
@@ -186,7 +186,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 	const titlePad = 2
 	titleText := strings.Repeat(" ", titlePad) + ansi.Truncate(o.title, o.width-titlePad-1, "…")
 	if o.sel < 0 {
-		setRow(titleRow, selRowStyle.Width(o.width).Render(titleText))
+		setRow(titleRow, st.selRow.Width(o.width).Render(titleText))
 	} else {
 		setRow(titleRow, titleBg.Width(o.width).Render(titleText))
 	}
@@ -243,7 +243,7 @@ func (o *outlineModel) view(height int, focused bool) string {
 		// text keeps its column, so nothing shifts when the cursor moves.
 		text := ansi.Truncate(label, o.width-panePad-1, "…")
 		if idx == o.sel {
-			setRow(row, selRowStyle.Width(o.width).Render(pad+text))
+			setRow(row, st.selRow.Width(o.width).Render(pad+text))
 		} else {
 			// h1/h2 rows read bright; deeper heading levels stay muted.
 			rowBg := resting

@@ -121,8 +121,8 @@ func TestSettingsLivePreviewAndRevert(t *testing.T) {
 	if got := m.settings.themes[m.settings.cursor].Name; got != m.theme.Name {
 		t.Fatalf("cursor theme = %q, active theme = %q", got, m.theme.Name)
 	}
-	if s := infoStyle.Render("x"); s == "x" {
-		t.Fatal("preview did not rebuild the package styles")
+	if s := m.styles.info.Render("x"); s == "x" {
+		t.Fatal("preview did not rebuild the viewer styles")
 	}
 
 	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEsc})

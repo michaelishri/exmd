@@ -20,7 +20,7 @@ import (
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	rows := m.content.Height
-	v := m.outline.view(rows, false)
+	v := m.outline.view(rows, false, m.styles)
 	lines := strings.Split(v, "\n")
 	if len(lines) != rows {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
@@ -142,8 +142,8 @@ func TestFocusBorderMoves(t *testing.T) {
 // is expressed by shading alone — no extra chrome in the gutter.
 func TestSidebarFocusKeepsLayout(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	unfocused := strings.Split(m.outline.view(m.paneHeight, false), "\n")
-	focused := strings.Split(m.outline.view(m.paneHeight, true), "\n")
+	unfocused := strings.Split(m.outline.view(m.paneHeight, false, m.styles), "\n")
+	focused := strings.Split(m.outline.view(m.paneHeight, true, m.styles), "\n")
 
 	// The strip's own rendering does not depend on focus at all.
 	for i := range unfocused {
@@ -172,8 +172,8 @@ func TestSidebarFocusShading(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	unfocused := strings.Split(m.outline.view(m.paneHeight, false), "\n")
-	focused := strings.Split(m.outline.view(m.paneHeight, true), "\n")
+	unfocused := strings.Split(m.outline.view(m.paneHeight, false, m.styles), "\n")
+	focused := strings.Split(m.outline.view(m.paneHeight, true, m.styles), "\n")
 
 	// The first entry (body row 3) is unselected in both states.
 	if ansi.Strip(unfocused[3]) != ansi.Strip(focused[3]) {
@@ -212,13 +212,13 @@ func TestSelectionKeepsTextColumn(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	before := strings.Split(m.outline.view(m.paneHeight, false), "\n")
+	before := strings.Split(m.outline.view(m.paneHeight, false, m.styles), "\n")
 
 	// Focus the sidebar and select the first entry.
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	got := mm.(Model)
-	after := strings.Split(got.outline.view(got.paneHeight, false), "\n")
+	after := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")
 
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
@@ -270,7 +270,7 @@ More text after the h1.
 	if !strings.Contains(strings.Join(m.contentLines(), "\n"), "The Real Title") {
 		t.Fatal("the h1 disappeared from the document body")
 	}
-	v := m.outline.view(m.paneHeight, false)
+	v := m.outline.view(m.paneHeight, false, m.styles)
 	if !strings.Contains(strings.Split(v, "\n")[1], "Fixture") {
 		t.Fatalf("title row wrong: %q", strings.Split(v, "\n")[1])
 	}
@@ -317,7 +317,7 @@ func TestTitleRowIsSelectable(t *testing.T) {
 		t.Fatalf("setup: sel = %d, YOffset = %d; want first heading, scrolled down",
 			got.outline.sel, got.content.YOffset)
 	}
-	unselected := strings.Split(got.outline.view(got.paneHeight, false), "\n")[1]
+	unselected := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")[1]
 
 	// Moving up from the first entry lands on the title and jumps home.
 	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
@@ -328,7 +328,7 @@ func TestTitleRowIsSelectable(t *testing.T) {
 	if got.content.YOffset != 0 {
 		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset)
 	}
-	selected := strings.Split(got.outline.view(got.paneHeight, false), "\n")[1]
+	selected := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")[1]
 	if ansi.Strip(selected) != ansi.Strip(unselected) {
 		t.Fatalf("selection shifted the title text: %q -> %q",
 			ansi.Strip(unselected), ansi.Strip(selected))
@@ -376,7 +376,7 @@ func TestHeadingRowShading(t *testing.T) {
 	defer lipgloss.SetColorProfile(prevProfile)
 
 	m := newViewer(t, 120, 40)
-	v := m.outline.view(m.paneHeight, false)
+	v := m.outline.view(m.paneHeight, false, m.styles)
 	lines := strings.Split(v, "\n")
 
 	// Entries start at row 3: entry 0 is an h2 (1. Preflight…), entry 5 is

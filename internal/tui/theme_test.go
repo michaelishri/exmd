@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
@@ -11,27 +12,26 @@ import (
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
-// TestSetThemeRebuildsStyles checks that SetTheme re-points the derived
-// styles and that a model built afterwards captures the theme. The test
+// TestSetThemeSetsViewerStyles checks that a model built after SetTheme
+// captures that theme and derives its styles from it. The test
 // forces an ANSI profile so the dark theme is expected to carry color even
 // though the test process has no TTY.
-func TestSetThemeRebuildsStyles(t *testing.T) {
+func TestSetThemeSetsViewerStyles(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.ANSI)
 	defer lipgloss.SetColorProfile(prevProfile)
 	defer SetTheme(theme.Dark)
 
 	SetTheme(theme.Dark)
-	if s := infoStyle.Render("x"); s == "x" {
+	if s := newViewer(t, 120, 40).styles.info.Render("x"); s == "x" {
 		t.Fatal("dark theme rendered no color despite a color profile")
 	}
 
 	SetTheme(theme.Notty)
-	if s := infoStyle.Render("x"); s != "x" {
-		t.Fatalf("notty infoStyle = %q, want plain text", s)
-	}
-
 	m := newViewer(t, 120, 40)
+	if s := m.styles.info.Render("x"); s != "x" {
+		t.Fatalf("notty info style = %q, want plain text", s)
+	}
 	if m.theme.Name != theme.Notty.Name {
 		t.Fatalf("model theme = %q, want %q", m.theme.Name, theme.Notty.Name)
 	}
@@ -112,5 +112,30 @@ func TestInlineBoxUsesThemeSurface(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("inline box has no theme exec surface: %q", st.box)
+	}
+}
+
+// TestThemePreviewIsLocalToTheViewer: previewing a theme in one viewer must
+// not restyle another, nor change the theme new viewers start with.
+func TestThemePreviewIsLocalToTheViewer(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+	defer SetTheme(theme.Dark)
+	SetTheme(theme.Dark)
+
+	a, b := newViewer(t, 120, 40), newViewer(t, 120, 40)
+	before := a.View()
+	b = pressKey(b, runeKey(','))
+	b = pressKey(b, tea.KeyMsg{Type: tea.KeyEnter})
+	b = pressKey(b, tea.KeyMsg{Type: tea.KeyDown})
+	if b.theme.Name == theme.Dark.Name {
+		t.Fatal("preview did not change the previewing viewer")
+	}
+	if a.View() != before {
+		t.Fatal("another viewer was restyled by the preview")
+	}
+	if newViewer(t, 120, 40).theme.Name != theme.Dark.Name {
+		t.Fatal("preview changed the theme new viewers start with")
 	}
 }
