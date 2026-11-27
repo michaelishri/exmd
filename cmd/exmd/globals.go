@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 type kv struct{ key, val string }
@@ -94,9 +96,9 @@ func cmdGlobals(args []string) int {
 	for _, name := range names {
 		src, val := "absent", "—"
 		if ov, ok := overrides[name]; ok {
-			src, val = "override", ov
+			src, val = "override", termsafe.Visible(ov)
 		} else if def := res.Doc.Globals[name]; def != nil {
-			src, val = "default", *def
+			src, val = "default", termsafe.Visible(*def)
 		}
 		if val == "—" {
 			val = styleDim.Render("—")

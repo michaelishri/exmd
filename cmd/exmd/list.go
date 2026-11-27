@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 // cmdList enumerates the document's executable blocks (SPEC.md §3).
@@ -34,7 +35,7 @@ func cmdList(args []string) int {
 	for _, b := range res.Doc.Blocks {
 		src := "(embedded)"
 		if b.Kind == doc.KindScript {
-			src = b.ScriptPath
+			src = termsafe.Visible(b.ScriptPath)
 		}
 		rows = append(rows, []string{
 			fmt.Sprint(b.Index), b.Lang, b.Kind.String(), fmt.Sprint(b.Line), src,
