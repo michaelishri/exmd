@@ -8,21 +8,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
+	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/session"
+	"github.com/michaelishri/exmd/internal/termsafe"
+	"github.com/michaelishri/exmd/internal/theme"
 	"github.com/michaelishri/exmd/internal/tui"
 )
 
 // cmdTUI opens a document in the viewer. Execution lives here; headless
 // verbs never run blocks (SPEC.md §6: the interface is the tool's choice).
 // Launch-time overrides arrive as --set KEY=VALUE in any position; --theme
-// selects the palette.
+// selects the palette; --no-session turns session saving off.
 func cmdTUI(args []string) int {
+	args, noSession := extractBool(args, "--no-session")
 	themeName, args, err := parseTheme(args)
-	if errors.Is(err, errHelp) {
-		fmt.Println(usage)
-		return 0
-	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
@@ -37,60 +37,85 @@ func cmdTUI(args []string) int {
 		return 2
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: exmd DOC [--set KEY=VALUE]... [--theme NAME]")
+		fmt.Fprintln(os.Stderr, "usage: exmd DOC [--set KEY=VALUE]... [--theme NAME] [--no-session]")
 		return 2
 	}
 
-	th, err := resolveInvocationTheme(themeName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
-		return 2
+	if _, code := applyInvocationTheme(themeName); code != 0 {
+		return code
 	}
-	tui.SetTheme(th)
-	setDiagnosticTheme(th)
-
-	res, code := loadDoc(positional[0])
+	res, code := loadForViewer(positional[0])
 	if res == nil {
 		return code
 	}
-	// Pre-flight runs before anything can execute (SPEC.md §5.3).
+	return launchTUI(res, sets.toMap(), nil, !noSession)
+}
+
+// applyInvocationTheme resolves the theme once per invocation and points the
+// viewer and the diagnostics at it.
+func applyInvocationTheme(name string) (theme.Theme, int) {
+	th, err := resolveInvocationTheme(name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
+		return th, 2
+	}
+	tui.SetTheme(th)
+	setDiagnosticTheme(th)
+	return th, 0
+}
+
+// loadForViewer loads a document and runs pre-flight before anything can
+// execute (SPEC.md §5.3). A document with errors is refused with all of
+// them reported at once.
+func loadForViewer(path string) (*doc.Result, int) {
+	res, code := loadDoc(path)
+	if res == nil {
+		return nil, code
+	}
 	res.Preflight()
 	res.Sort()
 	printDiagnostics(res)
 	if res.HasErrors() {
 		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
-		return 2
+		return nil, 2
 	}
-	return launchTUI(res, sets.toMap(), themeName, nil)
+	return res, 0
 }
 
 // launchTUI is shared by fresh opens and resumes. A non-nil snapshot restores
 // the saved viewer state; the underlying exec.Session is always created fresh.
-func launchTUI(res *doc.Result, overrides map[string]string, themeName string, snap *session.Snapshot) int {
-	th, err := resolveInvocationTheme(themeName)
+// saveSessions is false for --no-session; the save_sessions preference can
+// also turn saving off.
+func launchTUI(res *doc.Result, overrides map[string]string, snap *session.Snapshot, saveSessions bool) int {
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		fmt.Fprintf(os.Stderr, "exmd: the TUI needs an interactive terminal; try `exmd check %s`\n", termsafe.Visible(res.Doc.Path))
+		return 2
+	}
+	if cfg, err := config.Load(); err == nil && !cfg.SessionsEnabled() {
+		saveSessions = false
+	}
+
+	var model tui.Model
+	if snap != nil {
+		model = tui.NewWithSnapshot(res, overrides, snap)
+	} else {
+		model = tui.New(res, overrides)
+		if saveSessions {
+			if old, err := session.Load(res.Doc.Path); err == nil && old != nil {
+				model = model.WithNotice("a saved session exists — quit and reopen with --resume to restore it; running a block replaces it")
+			}
+		}
+	}
+	if !saveSessions {
+		model = model.WithoutSessionSaving()
+	}
+	final, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2
 	}
-	tui.SetTheme(th)
-	setDiagnosticTheme(th)
-
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Fprintf(os.Stderr, "exmd: the TUI needs an interactive terminal; try `exmd check %s`\n", res.Doc.Path)
-		return 2
-	}
-
-	var model tea.Model = tui.New(res, overrides)
-	if snap != nil {
-		model = tui.NewWithSnapshot(res, overrides, snap)
-	}
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
-		return 2
-	}
-	if snap == nil {
-		fmt.Printf("Session saved — resume with: exmd %s --resume\n", res.Doc.Path)
+	if m, ok := final.(tui.Model); ok && m.SessionSaved() && snap == nil {
+		fmt.Printf("Session saved — resume with: exmd %s --resume\n", termsafe.Visible(res.Doc.Path))
 	}
 	return 0
 }

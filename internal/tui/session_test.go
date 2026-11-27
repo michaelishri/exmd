@@ -131,6 +131,7 @@ func TestRestoredActiveRunIsMarkedStopped(t *testing.T) {
 func TestQuitFinalizesActiveRun(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := resumeViewer(t, nil)
+	m.sessionStarted = true // a run is in flight
 	st := m.stateFor(0)
 	st.active = true
 	st.done = false
@@ -152,6 +153,7 @@ func TestQuitFinalizesActiveRun(t *testing.T) {
 func TestCursorMovementIsSaved(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := resumeViewer(t, nil)
+	m.sessionStarted = true  // a block has run
 	m.lastSave = time.Time{} // force the throttled write to happen now
 	m.selectBlock(1)
 	s := savedSnapshot(t)
@@ -167,6 +169,7 @@ func TestSaveFailureIsReported(t *testing.T) {
 	t.Cleanup(func() { writeSession = prev })
 
 	m := resumeViewer(t, nil)
+	m.sessionStarted = true
 	m.saveSession()
 	if !strings.Contains(m.flash, "cannot save session") {
 		t.Fatalf("no error reaction: %q", m.flash)

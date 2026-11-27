@@ -202,3 +202,28 @@ func TestSettingsForcesSidebarOnNarrowTerminal(t *testing.T) {
 		t.Fatal("settings panel missing on narrow terminal")
 	}
 }
+
+// TestSettingsCommitKeepsOtherPreferences: saving a theme must not erase the
+// other keys in the config file.
+func TestSettingsCommitKeepsOtherPreferences(t *testing.T) {
+	defer SetTheme(theme.Dark)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	off := false
+	if err := config.Save(config.Config{Theme: "dark", SaveSessions: &off}); err != nil {
+		t.Fatal(err)
+	}
+	m := newViewer(t, 120, 40)
+	m = pressKey(m, runeKey(','))
+	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	want := m.theme.Name
+	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	c, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Theme != want || c.SessionsEnabled() {
+		t.Fatalf("config after commit = %+v, want theme %q with sessions off", c, want)
+	}
+}

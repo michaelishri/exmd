@@ -324,6 +324,7 @@ func TestAcceptanceCursorRestored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := acceptanceDoc(t)
 	m := acceptanceViewer(t, path, nil)
+	m.sessionStarted = true // a block has run
 	m.lastSave = time.Time{}
 	m.selectBlock(2)
 

@@ -114,15 +114,18 @@ the URLs in that output.
 
 ### Sessions
 
-The TUI saves one session per document as you work: when a block starts, while
-its output streams, when it finishes, and when you quit. Resume it with:
+Once you run a block, the TUI saves one session per document as you work: when
+a block starts, while its output streams, when it finishes, and when you quit.
+Opening a document and quitting without running anything leaves the saved
+session alone (the footer tells you when one exists). Resume it with:
 
 ```sh
 exmd DOC --resume
 ```
 
 `exmd --resume --list` shows saved sessions; `exmd DOC --resume --clear`
-discards one. A resumed session restores the harvested globals, each block's
+discards one; `exmd --resume --prune` removes sessions that can no longer be
+resumed (unreadable files, or documents that no longer exist). A resumed session restores the harvested globals, each block's
 output and status, and the highlighted block. It does **not** restore a
 live process, the host environment, or the scroll position: a run that was
 still active comes back stopped, with its partial output kept and ready to
@@ -136,7 +139,10 @@ the last still-valid checkpoint. Press **`r`** in the TUI to reload an edited
 document without restarting, or relaunch with `--resume`.
 
 Snapshots live in `$XDG_CONFIG_HOME/exmd/sessions/` (or
-`~/.config/exmd/sessions/`). They are refused when `--set` overrides differ,
+`~/.config/exmd/sessions/`), readable only by you. They hold globals —
+including `--set` values — and block output, so they can contain secrets.
+Pass `--no-session` to work without saving, or turn saving off for good with
+`save_sessions: false` in `config.yaml`. They are refused when `--set` overrides differ,
 when the snapshot is malformed, or when it uses the older v1 format — in each
 case the error says how to recover.
 

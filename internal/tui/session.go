@@ -18,7 +18,11 @@ var writeSession = session.Save
 
 // saveSession writes the current viewer state to the document's snapshot.
 // Save failures are reported in the footer but never disrupt the session.
+// Nothing is written until the session has started (see Model.sessionStarted).
 func (m *Model) saveSession() {
+	if !m.saveEnabled || !m.sessionStarted {
+		return
+	}
 	m.captureSnapshot()
 	if m.snap == nil {
 		return
@@ -28,6 +32,7 @@ func (m *Model) saveSession() {
 		return
 	}
 	m.lastSave = time.Now()
+	m.saved = true
 }
 
 // invalidateRunsFor drops the saved checkpoint for this block and everything
