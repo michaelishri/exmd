@@ -18,7 +18,7 @@ import (
 	"sort"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"

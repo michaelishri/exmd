@@ -1,0 +1,46 @@
+version: 2
+doc_path: /docs/runbook.md
+fingerprint: abc
+overrides:
+    TOKEN: |-
+        x: y
+        multi
+globals:
+    EMPTY: ""
+    GREETING: hello world
+    NUMLIKE: "0x1F"
+    "YES": "yes"
+absent:
+    - LATER
+next: 2
+block_sel: 1
+block_sel_key: k2
+keys:
+    - k1
+    - k2
+blocks:
+    - key: k1
+      index: 0
+      lines:
+        - one
+        - '  indented'
+        - '- dash'
+        - '# hash'
+        - 日本語
+      done: true
+    - key: k2
+      index: 1
+      dropped: 7
+      status: 3
+      done: true
+      err: boom
+      stale: true
+runs:
+    - key: k1
+      after:
+        globals:
+            GREETING: hello world
+        absent:
+            - LATER
+        next: 1
+updated_at: 2026-11-28T11:00:00.123456789Z

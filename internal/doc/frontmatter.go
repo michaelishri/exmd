@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 var globalNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -67,7 +67,8 @@ func splitFrontmatter(src []byte) (yamlSrc []byte, openLine int, closed bool, bo
 func parseFrontmatter(yamlSrc []byte, openLine int, d *Document, res *Result) (trusted bool) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(yamlSrc, &root); err != nil {
-		res.add(newDiag(SeverityError, adjustYamlLine(err.Error(), openLine), "invalid frontmatter YAML: "+strings.TrimPrefix(err.Error(), "yaml: ")))
+		line, msg := yamlError(err.Error(), openLine)
+		res.add(newDiag(SeverityError, line, "invalid frontmatter YAML: "+msg))
 		return false
 	}
 	if root.Kind == yaml.DocumentNode {
@@ -208,15 +209,21 @@ func nodeLine(n *yaml.Node, openLine int) int {
 	return n.Line + openLine
 }
 
-var yamlLineRE = regexp.MustCompile(`\bline (\d+)`)
+var (
+	yamlLineRE   = regexp.MustCompile(`\bline (\d+)`)
+	yamlPrefixRE = regexp.MustCompile(`^(yaml: )?(line \d+: )?`)
+)
 
-// adjustYamlLine best-effort rewrites a `line N` reference in a yaml error
-// message into a file line, offsetting by the frontmatter opening line.
-func adjustYamlLine(msg string, openLine int) int {
+// yamlError turns a yaml error into a file line and a message. The parser
+// counts lines within the frontmatter; the diagnostic reports the file line,
+// so the parser's own "line N:" prefix is dropped from the message. When no
+// line is given the frontmatter's opening line is used.
+func yamlError(msg string, openLine int) (int, string) {
+	line := openLine
 	if m := yamlLineRE.FindStringSubmatch(msg); m != nil {
 		if n, err := strconv.Atoi(m[1]); err == nil {
-			return n + openLine
+			line = n + openLine
 		}
 	}
-	return openLine
+	return line, yamlPrefixRE.ReplaceAllString(msg, "")
 }

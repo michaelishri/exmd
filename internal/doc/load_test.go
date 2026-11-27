@@ -305,3 +305,44 @@ func TestHeadingLines(t *testing.T) {
 		}
 	}
 }
+
+// TestFrontmatterYAMLErrors pins how YAML problems are reported: on the file
+// line the parser points at, without its frontmatter-relative "line N:".
+func TestFrontmatterYAMLErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, yaml string
+		wantLine   int
+		wantMsg    string
+	}{
+		{"unclosed flow sequence", "type: [runbook", 3, "did not find expected ',' or ']'"},
+		{"tab indentation", "type: runbook\n\tbad: tab", 3, "found a tab character that violates indentation"},
+		{"two values on one key", "type: runbook\nkey: value: other", 3, "mapping values are not allowed in this context"},
+		{"float spec", "type: runbook\nspec: 1.5", 3, "frontmatter `spec` must be an integer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "doc.md")
+			if err := os.WriteFile(path, []byte("---\n"+tc.yaml+"\n---\n# T\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			res, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var found bool
+			for _, d := range res.Diagnostics {
+				if strings.Contains(d.Message, tc.wantMsg) {
+					found = true
+					if d.Line != tc.wantLine {
+						t.Errorf("line = %d, want %d (%s)", d.Line, tc.wantLine, d.Message)
+					}
+					if yamlLineRE.MatchString(d.Message) {
+						t.Errorf("message keeps the parser's relative line: %q", d.Message)
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("no diagnostic containing %q: %+v", tc.wantMsg, res.Diagnostics)
+			}
+		})
+	}
+}
