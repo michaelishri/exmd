@@ -8,6 +8,7 @@ package session
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/exec"
 )
@@ -91,18 +93,14 @@ type BlockRestore struct {
 	Stale   bool
 }
 
-// Dir is the directory holding session snapshots. It lives alongside the
-// tool's other on-disk state and honours XDG_CONFIG_HOME.
+// Dir is the directory holding session snapshots, alongside the tool's
+// other on-disk state (config.Dir).
 func Dir() (string, error) {
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		var err error
-		base, err = os.UserConfigDir()
-		if err != nil {
-			return "", err
-		}
+	base, err := config.Dir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(base, "exmd", "sessions"), nil
+	return filepath.Join(base, "sessions"), nil
 }
 
 // Path returns the snapshot file for a document.
@@ -145,10 +143,7 @@ func Fingerprint(d *doc.Document) (string, error) {
 // writePart length-prefixes a chunk so distinct inputs cannot collide.
 func writePart(w io.Writer, data []byte) {
 	var n [8]byte
-	lenBytes := uint64(len(data))
-	for i := 0; i < 8; i++ {
-		n[i] = byte(lenBytes >> (8 * i))
-	}
+	binary.LittleEndian.PutUint64(n[:], uint64(len(data)))
 	_, _ = w.Write(n[:])
 	_, _ = w.Write(data)
 }

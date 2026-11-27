@@ -86,3 +86,28 @@ func TestSessionsEnabled(t *testing.T) {
 		t.Error("explicit values not honoured")
 	}
 }
+
+// TestSaveIsAtomic: saving replaces the file in one step and leaves no
+// temporary files behind.
+func TestSaveIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	for _, name := range []string{"dark", "nord"} {
+		if err := Save(Config{Theme: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "exmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "config.yaml" {
+		t.Fatalf("config dir holds %v, want only config.yaml", entries)
+	}
+	if c, _ := Load(); c.Theme != "nord" {
+		t.Fatalf("theme = %q", c.Theme)
+	}
+	if d, _ := Dir(); d != filepath.Join(dir, "exmd") {
+		t.Fatalf("Dir = %q", d)
+	}
+}
