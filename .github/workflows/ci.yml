@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux (vet, race tests, staticcheck, govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  macos:
+    name: macOS (tests, harness on bash 3.2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      # /bin/bash on macOS is bash 3.2, which runbooks there use by default.
+      - name: Harness on /bin/bash
+        run: go test -v -run 'Bash|Trap|Harness|Replaced|Truncated' ./internal/exec
+        env:
+          EXMD_TEST_BASH: /bin/bash
