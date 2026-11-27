@@ -11,9 +11,10 @@ import (
 
 // compatSnapshot is the snapshot stored in testdata/snapshot-yaml-v3.yaml,
 // which was written by the gopkg.in/yaml.v3 encoder exmd used before
-// moving to go.yaml.in/yaml/v4.
+// moving to go.yaml.in/yaml/v4. Its `fingerprint` key is from an older
+// format and is ignored.
 var compatSnapshot = Snapshot{
-	Version: FormatVersion, DocPath: "/docs/runbook.md", Fingerprint: "abc",
+	Version: FormatVersion, DocPath: "/docs/runbook.md",
 	Overrides: map[string]string{"TOKEN": "x: y\nmulti"},
 	Globals:   map[string]string{"GREETING": "hello world", "EMPTY": "", "NUMLIKE": "0x1F", "YES": "yes"},
 	Absent:    []string{"LATER"}, Next: 2, BlockSel: 1, BlockSelKey: "k2", Keys: []string{"k1", "k2"},

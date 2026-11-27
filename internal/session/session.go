@@ -32,10 +32,9 @@ const FormatVersion = 2
 // Snapshot is one saved viewer session. Files are keyed by the absolute
 // document path, so there is a single latest snapshot per document.
 type Snapshot struct {
-	Version     int               `yaml:"version"`
-	DocPath     string            `yaml:"doc_path"`
-	Fingerprint string            `yaml:"fingerprint,omitempty"` // informational only in v2
-	Overrides   map[string]string `yaml:"overrides,omitempty"`
+	Version   int               `yaml:"version"`
+	DocPath   string            `yaml:"doc_path"`
+	Overrides map[string]string `yaml:"overrides,omitempty"`
 
 	Globals map[string]string `yaml:"globals,omitempty"`
 	Absent  []string          `yaml:"absent,omitempty"`
@@ -117,29 +116,6 @@ func Path(docPath string) (string, error) {
 	return filepath.Join(dir, hex.EncodeToString(sum[:])+".yaml"), nil
 }
 
-// Fingerprint hashes the document source together with every script it
-// references. Changing either invalidates saved sessions for that document.
-func Fingerprint(d *doc.Document) (string, error) {
-	h := sha256.New()
-	writePart(h, d.Source)
-	paths := make([]string, 0, len(d.Blocks))
-	for _, b := range d.Blocks {
-		if b.Kind == doc.KindScript && b.ScriptAbs != "" {
-			paths = append(paths, b.ScriptAbs)
-		}
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return "", fmt.Errorf("script %s: %w", p, err)
-		}
-		writePart(h, []byte(p))
-		writePart(h, data)
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 // writePart length-prefixes a chunk so distinct inputs cannot collide.
 func writePart(w io.Writer, data []byte) {
 	var n [8]byte
@@ -150,10 +126,6 @@ func writePart(w io.Writer, data []byte) {
 
 // New builds an initial snapshot for a document and its launch overrides.
 func New(d *doc.Document, overrides map[string]string) (*Snapshot, error) {
-	fp, err := Fingerprint(d)
-	if err != nil {
-		return nil, err
-	}
 	abs, err := filepath.Abs(d.Path)
 	if err != nil {
 		return nil, err
@@ -169,14 +141,13 @@ func New(d *doc.Document, overrides map[string]string) (*Snapshot, error) {
 		}
 	}
 	s := &Snapshot{
-		Version:     FormatVersion,
-		DocPath:     abs,
-		Fingerprint: fp,
-		Overrides:   cloneMap(overrides),
-		Globals:     present,
-		BlockSel:    -1,
-		Keys:        keys,
-		UpdatedAt:   time.Now().UTC(),
+		Version:   FormatVersion,
+		DocPath:   abs,
+		Overrides: cloneMap(overrides),
+		Globals:   present,
+		BlockSel:  -1,
+		Keys:      keys,
+		UpdatedAt: time.Now().UTC(),
 	}
 	for name := range d.Globals {
 		if _, ok := present[name]; !ok {
@@ -362,9 +333,8 @@ func (s *Snapshot) Validate(d *doc.Document, overrides map[string]string) error 
 	if s.DocPath != abs {
 		return fmt.Errorf("snapshot belongs to another document (%s); %s", s.DocPath, hint)
 	}
-	// The document-wide fingerprint is informational in v2. Edited
-	// executable blocks are matched by key and rolled back by Plan instead
-	// of rejecting the whole snapshot.
+	// Edited executable blocks are matched by content key and rolled back
+	// by Plan instead of rejecting the whole snapshot.
 	if !sameMap(s.Overrides, overrides) {
 		return fmt.Errorf("--set overrides differ from the saved session; replay them or clear the snapshot with `exmd DOC --resume --clear`")
 	}

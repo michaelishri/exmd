@@ -176,47 +176,6 @@ func TestLoadRejectsMalformedAndOldVersions(t *testing.T) {
 	}
 }
 
-func TestFingerprintTracksDocumentAndScripts(t *testing.T) {
-	isolate(t)
-	dir := t.TempDir()
-	script := filepath.Join(dir, "helper.sh")
-	if err := os.WriteFile(script, []byte("echo one\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	docPath := filepath.Join(dir, "runbook.md")
-	src := "---\ntype: runbook\n---\n\n" +
-		"```bash:exec\n@helper.sh\n```\n"
-	if err := os.WriteFile(docPath, []byte(src), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	d := load(t, docPath)
-	first, err := Fingerprint(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(script, []byte("echo two\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	second, err := Fingerprint(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first == second {
-		t.Fatal("editing a referenced script did not change the fingerprint")
-	}
-	if err := os.WriteFile(docPath, []byte(src+"\nmore text\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	thirdDoc := load(t, docPath)
-	third, err := Fingerprint(thirdDoc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second == third {
-		t.Fatal("editing the document did not change the fingerprint")
-	}
-}
-
 func TestValidate(t *testing.T) {
 	isolate(t)
 	path := writeDoc(t, flowSource)
