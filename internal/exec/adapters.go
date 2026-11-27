@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec" //nolint:depguard // the standard library's exec; package name collision is intentional
 	"path/filepath"
+
+	"github.com/michaelishri/exmd/internal/doc"
 )
 
 // Adapter executes blocks of one language (SPEC.md §5.1). Both v1 adapters
@@ -19,28 +21,30 @@ type Adapter struct {
 	Args func(tmpDir string) []string
 }
 
-// Lookup returns the adapter for a fence language (SPEC.md §5.2).
+// Lookup returns the adapter for a fence language (SPEC.md §5.2). The
+// language list, aliases included, lives in doc.Interpreter.
 func Lookup(lang string) (Adapter, bool) {
-	a, ok := adapters[lang]
+	bin, ok := doc.Interpreter(lang)
+	if !ok {
+		return Adapter{}, false
+	}
+	a, ok := adapters[bin]
 	return a, ok
 }
 
-var adapters = func() map[string]Adapter {
-	python := Adapter{
+// adapters is keyed by interpreter binary.
+var adapters = map[string]Adapter{
+	"bash": {
+		Bin:  "bash",
+		Ext:  "sh",
+		Args: func(dir string) []string { return []string{filepath.Join(dir, "harness.sh")} },
+	},
+	"python3": {
 		Bin:  "python3",
 		Ext:  "py",
 		Args: func(dir string) []string { return []string{filepath.Join(dir, "harness.py")} },
-	}
-	return map[string]Adapter{
-		"bash": {
-			Bin:  "bash",
-			Ext:  "sh",
-			Args: func(dir string) []string { return []string{filepath.Join(dir, "harness.sh")} },
-		},
-		"python3": python,
-		"python":  python, // alias (SPEC.md §5.2)
-	}
-}()
+	},
+}
 
 // command builds the interpreter command for a run.
 func (a Adapter) command(tmpDir string) *exec.Cmd {

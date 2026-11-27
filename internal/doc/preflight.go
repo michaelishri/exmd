@@ -9,11 +9,19 @@ import (
 )
 
 // knownLanguages maps fence languages to the interpreter binary the v1
-// adapter runs them with (SPEC.md §5.2).
+// adapter runs them with (SPEC.md §5.2). It is the single list of supported
+// languages: the execution engine looks adapters up through Interpreter.
 var knownLanguages = map[string]string{
 	"bash":    "bash",
 	"python3": "python3",
 	"python":  "python3", // alias (SPEC.md §5.2)
+}
+
+// Interpreter returns the interpreter binary for a fence language, and
+// false when no v1 adapter supports it.
+func Interpreter(lang string) (string, bool) {
+	bin, ok := knownLanguages[lang]
+	return bin, ok
 }
 
 // Preflight performs the environment-dependent checks of SPEC.md §2.3:
@@ -56,7 +64,7 @@ func (r *Result) preflightInterpreters() {
 	seenBin := map[string]bool{}
 	seenLang := map[string]bool{}
 	for _, b := range r.Doc.Blocks {
-		bin, ok := knownLanguages[b.Lang]
+		bin, ok := Interpreter(b.Lang)
 		if !ok {
 			if !seenLang[b.Lang] {
 				seenLang[b.Lang] = true
