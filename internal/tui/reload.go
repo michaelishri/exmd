@@ -62,21 +62,7 @@ func (m *Model) reloadDocument() {
 	// Rebuild inline state from the plan: blocks whose identity changed have
 	// no restored entry and must start completely fresh.
 	m.inline = map[int]*inlineState{}
-	interrupted := applyRestore(m, plan)
-	m.resuming = true
-	m.restoredState = plan.State
-	m.blockSel = plan.BlockSel
-
-	m.snap.Keys = append([]string(nil), m.blockKeys...)
-	m.snap.BlockSel = m.blockSel
-	if m.blockSel >= 0 && m.blockSel < len(m.blockKeys) {
-		m.snap.BlockSelKey = m.blockKeys[m.blockSel]
-	} else {
-		m.snap.BlockSelKey = ""
-	}
-	m.snap.Globals = cloneStringMap(plan.State.Globals)
-	m.snap.Absent = append([]string(nil), plan.State.Absent...)
-	m.snap.Next = plan.State.Next
+	interrupted := m.adoptPlan(plan)
 
 	m.relayout()
 	if heading != "" {

@@ -162,23 +162,31 @@ func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session
 			m.blockKeys = keys
 		}
 	}
-	m.resuming = true
 	m.sessionStarted = true
+	interrupted := m.adoptPlan(plan)
+	m.flash = resumeSummary(len(plan.Changed), len(plan.Stale), interrupted)
+	return m
+}
+
+// adoptPlan makes a restore plan the viewer's state: the cursor, the inline
+// boxes, the state the next engine session starts from, and the snapshot
+// that will be saved. It returns the number of interrupted runs.
+func (m *Model) adoptPlan(plan *session.RestorePlan) int {
+	m.resuming = true
 	m.restoredState = plan.State
 	m.blockSel = plan.BlockSel
-	interrupted := applyRestore(&m, plan)
+	interrupted := applyRestore(m, plan)
 
 	m.snap.Keys = append([]string(nil), m.blockKeys...)
 	m.snap.BlockSel = m.blockSel
+	m.snap.BlockSelKey = ""
 	if m.blockSel >= 0 && m.blockSel < len(m.blockKeys) {
 		m.snap.BlockSelKey = m.blockKeys[m.blockSel]
 	}
 	m.snap.Globals = cloneStringMap(plan.State.Globals)
 	m.snap.Absent = append([]string(nil), plan.State.Absent...)
 	m.snap.Next = plan.State.Next
-
-	m.flash = resumeSummary(len(plan.Changed), len(plan.Stale), interrupted)
-	return m
+	return interrupted
 }
 
 // applyRestore folds a restore plan into the model's inline boxes. It returns
