@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -12,21 +13,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/exec"
-	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 // eventChanBuffer is sized so that a synchronous test driver cannot
 // deadlock on a full channel; the live program drains concurrently.
 const eventChanBuffer = 4096
 
-// maxBlockLines caps how much output one block's inline box keeps.
-const maxBlockLines = 500
+// maxEventBatch bounds how many engine events one message carries. A burst
+// of output is folded in and drawn once instead of once per chunk.
+const maxEventBatch = 1024
 
 // Tea messages for inline block execution. index identifies the block so
 // several runs can keep their own output and status.
 type inlineEventMsg struct {
 	index int
-	ev    exec.Event
+	evs   []exec.Event
 }
 type inlineDoneMsg struct {
 	index  int
@@ -39,8 +40,12 @@ type inlineState struct {
 	active    bool
 	done      bool
 	stale     bool
-	lines     []string
-	pending   string
+	lines     []string // complete output lines, the most recent maxBlockLines
+	dropped   int      // earlier lines discarded to stay within maxBlockLines
+	pending   string   // trailing partial line, raw
+	overflow  bool     // pending reached maxLineBytes; the rest of the line is dropped
+	urls      []string // cached outputURLs of the stored output
+	urlsValid bool
 	status    int
 	result    *exec.RunResult
 	err       error
@@ -48,6 +53,7 @@ type inlineState struct {
 	rendered  []string // rendered output rows, one per line in lines
 	boxWidth  int      // width used for rendered
 	boxIndent int      // indent used for rendered
+	boxTheme  string   // theme used for rendered
 	urlIndex  int      // next URL to copy from this block's output
 	ch        chan exec.Event
 	finished  chan struct{} // closed when the engine run returns
@@ -164,6 +170,7 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	st.active, st.done, st.stale = true, false, false
 	st.lines, st.pending, st.result, st.err = nil, "", nil, nil
 	st.status, st.box, st.urlIndex = 0, nil, 0
+	st.dropped, st.overflow, st.urlsValid = 0, false, false
 
 	// One session for all inline runs carries the harvest delta between
 	// blocks (SPEC.md §4.3): running #3 then #9 sees #3's WORK.
@@ -214,7 +221,8 @@ func (m *Model) beginInlineRun() tea.Cmd {
 	return tea.Batch(runCmd, m.inlineListenCmd(st, index))
 }
 
-// inlineListenCmd delivers the next event, then reports completion once the
+// inlineListenCmd waits for the next event and takes every further event
+// already queued (up to maxEventBatch), then reports completion once the
 // channel is drained and closed. This gives the channel a single owner: no
 // event can be lost between the listener and finalization.
 func (m *Model) inlineListenCmd(st *inlineState, index int) tea.Cmd {
@@ -224,7 +232,20 @@ func (m *Model) inlineListenCmd(st *inlineState, index int) tea.Cmd {
 		if !ok {
 			return inlineDoneMsg{index: index, result: st.result}
 		}
-		return inlineEventMsg{index: index, ev: ev}
+		evs := []exec.Event{ev}
+		for len(evs) < maxEventBatch {
+			select {
+			case ev, ok := <-ch:
+				if !ok {
+					// The next listen reports completion.
+					return inlineEventMsg{index: index, evs: evs}
+				}
+				evs = append(evs, ev)
+			default:
+				return inlineEventMsg{index: index, evs: evs}
+			}
+		}
+		return inlineEventMsg{index: index, evs: evs}
 	}
 }
 
@@ -238,54 +259,26 @@ func (st *inlineState) applyEvent(ev exec.Event) {
 	}
 }
 
-// applyInlineEvent folds one engine observation into a block's output.
-func (m *Model) applyInlineEvent(index int, ev exec.Event) {
+// applyInlineEvents folds a batch of engine observations into a block's
+// output and redraws once.
+func (m *Model) applyInlineEvents(index int, evs []exec.Event) {
 	st := m.stateFor(index)
 	if st.done {
 		return
 	}
-	st.applyEvent(ev)
+	for _, ev := range evs {
+		st.applyEvent(ev)
+	}
 	m.rebuildInlineBox(index)
 	m.refreshInlineContent(index)
 	m.saveSessionThrottled()
-}
-
-// write accumulates output chunks into complete lines, dropping escape sequences
-// and control characters so output cannot steer the terminal.
-func (st *inlineState) write(chunk []byte) {
-	text := st.pending + string(chunk)
-	parts := strings.Split(text, "\n")
-	st.pending = parts[len(parts)-1]
-	for _, p := range parts[:len(parts)-1] {
-		if len(st.lines) < maxBlockLines {
-			st.lines = append(st.lines, termsafe.Strip(p))
-		}
-	}
-}
-
-// copiedText returns the block's output as plain text: every complete line,
-// plus the trailing partial line still accumulating during a run. Copying
-// uses these stored lines, not the rendered box, so the text is neither
-// truncated to the pane width nor decorated with the output box's chrome.
-func (st *inlineState) copiedText() string {
-	text := strings.Join(st.lines, "\n")
-	if st.pending != "" {
-		if text != "" {
-			text += "\n"
-		}
-		text += st.pending
-	}
-	return text
 }
 
 // finalizeInline records one block's outcome and flushes trailing output.
 // The listener has already drained the event channel at this point.
 func (m *Model) finalizeInline(index int, result *exec.RunResult) {
 	st := m.stateFor(index)
-	if st.pending != "" {
-		st.lines = append(st.lines, termsafe.Strip(st.pending))
-		st.pending = ""
-	}
+	st.flush()
 	st.result = result
 	st.active = false
 	st.done = true
@@ -331,29 +324,37 @@ func (m *Model) rebuildInlineBox(index int) {
 	}
 	w := m.content.Width
 	indent := m.inlineIndent(index)
-	// A resize or a new run invalidates the rendered rows. Otherwise only
-	// the lines added since the last event need styling.
-	if st.boxWidth != w || st.boxIndent != indent || len(st.rendered) > len(st.lines) {
+	// A resize, a theme change or a new run invalidates the rendered rows.
+	// Otherwise only the lines added since the last event need styling
+	// (write drops rendered rows together with the lines they show).
+	if st.boxWidth != w || st.boxIndent != indent || st.boxTheme != m.theme.Name ||
+		len(st.rendered) > len(st.lines) {
 		st.rendered = nil
-		st.boxWidth, st.boxIndent = w, indent
+		st.boxWidth, st.boxIndent, st.boxTheme = w, indent, m.theme.Name
 	}
 
 	surface := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.ExecPanel))
 	body := surface.Foreground(lipgloss.Color(m.theme.Text))
+	muted := surface.Foreground(lipgloss.Color(m.theme.TextMuted))
 	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
 	room := max(0, w-1-len(prefix))
+	row := func(style lipgloss.Style, text string) string {
+		return " " + style.Render(prefix+fitCells(text, room))
+	}
 	for i := len(st.rendered); i < len(st.lines); i++ {
-		l := st.lines[i]
-		if len(l) > room {
-			l = l[:room]
-		}
-		st.rendered = append(st.rendered,
-			" "+body.Render(prefix+l+strings.Repeat(" ", room-len(l))))
+		st.rendered = append(st.rendered, row(body, st.lines[i]))
 	}
 
-	lines := make([]string, 0, len(st.rendered)+2)
+	lines := make([]string, 0, len(st.rendered)+4)
 	lines = append(lines, " "+execEdgeStyle.Render(strings.Repeat("─", max(0, w-1))))
+	if st.dropped > 0 {
+		lines = append(lines, row(muted, fmt.Sprintf("… %d earlier line(s) not shown", st.dropped)))
+	}
 	lines = append(lines, st.rendered...)
+	if st.active && (st.pending != "" || st.overflow) {
+		// The line still being written, e.g. a progress bar.
+		lines = append(lines, row(body, cleanOutputLine(st.pending)))
+	}
 	lines = append(lines, " "+body.Render(strings.Repeat(" ", max(0, w-1))))
 	st.box = lines
 }

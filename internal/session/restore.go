@@ -140,12 +140,13 @@ func (s *Snapshot) Plan(d *doc.Document, overrides map[string]string) (*RestoreP
 			continue
 		}
 		plan.Blocks[i] = BlockRestore{
-			Lines:  append([]string(nil), bs.Lines...),
-			Status: bs.Status,
-			Done:   bs.Done,
-			Active: bs.Active,
-			Err:    bs.Err,
-			Stale:  staleKeys[key],
+			Lines:   append([]string(nil), bs.Lines...),
+			Dropped: bs.Dropped,
+			Status:  bs.Status,
+			Done:    bs.Done,
+			Active:  bs.Active,
+			Err:     bs.Err,
+			Stale:   staleKeys[key],
 		}
 	}
 
