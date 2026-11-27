@@ -14,6 +14,7 @@ import (
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/termsafe"
 	"github.com/michaelishri/exmd/internal/theme"
 	"github.com/muesli/termenv"
 )
@@ -240,13 +241,13 @@ func loadDoc(path string) (*doc.Result, int) {
 //
 //	path:line: error: block N: message
 func printDiagnostics(res *doc.Result) {
-	path := styleDim.Render(res.Doc.Path)
+	path := styleDim.Render(termsafe.Visible(res.Doc.Path))
 	for _, d := range res.Diagnostics {
 		sev := styleErr.Render("error")
 		if d.Severity == doc.SeverityWarning {
 			sev = styleWarn.Render("warning")
 		}
-		msg := d.Detail()
+		msg := termsafe.Visible(d.Detail())
 		if d.Line > 0 {
 			printThemeLine(fmt.Sprintf("%s:%d: %s: %s", path, d.Line, sev, msg))
 		} else {

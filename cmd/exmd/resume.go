@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/michaelishri/exmd/internal/session"
+	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 const resumeUsage = `exmd DOC --resume [--set KEY=VALUE]... [--theme auto|dark|notty]
@@ -100,7 +101,7 @@ func cmdResume(args []string) int {
 		rows := make([][]string, 0, len(snaps))
 		for _, s := range snaps {
 			rows = append(rows, []string{
-				s.DocPath,
+				termsafe.Visible(s.DocPath),
 				s.UpdatedAt.Local().Format("2006-01-02 15:04"),
 				fmt.Sprintf("%d", len(s.Blocks)),
 			})

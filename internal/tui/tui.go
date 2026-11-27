@@ -22,6 +22,7 @@ import (
 	"github.com/michaelishri/exmd/internal/exec"
 	"github.com/michaelishri/exmd/internal/render"
 	"github.com/michaelishri/exmd/internal/session"
+	"github.com/michaelishri/exmd/internal/termsafe"
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
@@ -208,7 +209,7 @@ func cloneStringMap(m map[string]string) map[string]string {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.SetWindowTitle("exmd — " + m.doc.HeadingText())
+	return tea.SetWindowTitle("exmd — " + termsafe.Strip(m.doc.HeadingText()))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -847,11 +848,11 @@ func (m Model) leftPaneView() string {
 		hints = m.keyHints()
 	}
 	if m.flash != "" {
-		hints = m.flash
+		hints = termsafe.Visible(m.flash)
 	}
 	text := "  " + hints
 	if !m.outline.visible {
-		text = composeLeftRight(text, m.doc.Path, width)
+		text = composeLeftRight(text, termsafe.Visible(m.doc.Path), width)
 	} else {
 		text = padRow(text, width)
 	}
@@ -892,7 +893,7 @@ func (m Model) rightPaneView() string {
 	if m.focus == focusOutline {
 		pathStyle = rowStyle
 	}
-	path := "  " + ansi.Truncate(m.doc.Path, max(1, m.outline.width-3), "…")
+	path := "  " + ansi.Truncate(termsafe.Visible(m.doc.Path), max(1, m.outline.width-3), "…")
 	blank := pathStyle.Width(m.outline.width).Render("")
 	return strings.Join(append(rows,
 		blank,

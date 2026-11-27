@@ -17,6 +17,7 @@ import (
 	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/doc"
+	"github.com/michaelishri/exmd/internal/termsafe"
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
@@ -61,7 +62,7 @@ func Render(d *doc.Document, width int, th theme.Theme) *Output {
 	numbers := headingNumbers(d)
 
 	bounds := boundaries(d)
-	srcLines := strings.Split(string(d.Source), "\n")
+	srcLines := safeLines(strings.Split(string(d.Source), "\n"))
 
 	var style, execStyle ansi.StyleConfig
 	if color {
@@ -148,7 +149,7 @@ func Render(d *doc.Document, width int, th theme.Theme) *Output {
 // blockLabel is the single source of truth for an executable block's badge
 // text and its render mark label.
 func blockLabel(b *doc.Block) string {
-	return fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b))
+	return termsafe.Visible(fmt.Sprintf("%s — line %d · %s", b.Lang, b.Line, blockSource(b)))
 }
 
 // boundaries returns the chunk start lines: the first body line, then every

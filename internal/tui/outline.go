@@ -7,6 +7,7 @@ import (
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/render"
+	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 const (
@@ -61,7 +62,7 @@ func sidebarTitle(d *doc.Document) (string, int) {
 func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 	o.width = width
 	title, skip := sidebarTitle(d)
-	o.title = title
+	o.title = termsafe.Visible(title)
 	o.entries = o.entries[:0]
 	switch o.tab {
 	case tabHeadings:
@@ -73,7 +74,7 @@ func (o *outlineModel) rebuild(d *doc.Document, out *render.Output, width int) {
 			if i >= len(out.Headings) {
 				break
 			}
-			label := h.Text
+			label := termsafe.Visible(h.Text)
 			if n := out.Headings[i].Number; n != "" {
 				label = n + " " + label
 			}

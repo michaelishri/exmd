@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/exec"
+	"github.com/michaelishri/exmd/internal/termsafe"
 )
 
 // eventChanBuffer is sized so that a synchronous test driver cannot
@@ -241,15 +242,15 @@ func (m *Model) applyInlineEvent(index int, ev exec.Event) {
 	m.saveSessionThrottled()
 }
 
-// write accumulates output chunks into complete lines, stripping ANSI like
-// the run view does.
+// write accumulates output chunks into complete lines, dropping escape sequences
+// and control characters so output cannot steer the terminal.
 func (st *inlineState) write(chunk []byte) {
 	text := st.pending + string(chunk)
 	parts := strings.Split(text, "\n")
 	st.pending = parts[len(parts)-1]
 	for _, p := range parts[:len(parts)-1] {
 		if len(st.lines) < maxBlockLines {
-			st.lines = append(st.lines, ansi.Strip(p))
+			st.lines = append(st.lines, termsafe.Strip(p))
 		}
 	}
 }
@@ -274,7 +275,7 @@ func (st *inlineState) copiedText() string {
 func (m *Model) finalizeInline(index int, result *exec.RunResult) {
 	st := m.stateFor(index)
 	if st.pending != "" {
-		st.lines = append(st.lines, ansi.Strip(st.pending))
+		st.lines = append(st.lines, termsafe.Strip(st.pending))
 		st.pending = ""
 	}
 	st.result = result
