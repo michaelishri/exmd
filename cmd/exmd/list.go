@@ -10,6 +10,11 @@ import (
 
 // cmdList enumerates the document's executable blocks (SPEC.md §3).
 func cmdList(args []string) int {
+	args, help := extractHelp(args)
+	if help {
+		fmt.Println("usage: exmd list DOC")
+		return 0
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: exmd list DOC")
 		return 2

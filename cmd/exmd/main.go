@@ -24,9 +24,9 @@ const version = "0.6.2"
 const usage = `exmd — executable Markdown (runbooks)
 
 Usage:
-  exmd DOC [--resume] [--set K=V] [--theme NAME]
+  exmd DOC [--resume] [--set K=V] [--theme NAME] [--no-session]
                                     open a runbook in the TUI (backtick selects blocks, enter runs, r reloads, c copies output, esc stops, , settings);
-                                    --resume restores the last saved session for DOC
+                                    --resume restores the last saved session for DOC; --no-session saves nothing
   exmd --resume --list               list saved sessions
   exmd --resume --prune              remove sessions that can no longer be resumed
   exmd DOC --resume --clear          discard a saved session
@@ -48,10 +48,12 @@ otherwise. Other palettes:
   rose-pine-dawn, everforest-light, ayu-dark, ayu-light, dark, notty
 Aliases: catppuccin, atom, atom-light, tokyonight, rosepine.
 
-The TUI saves one session per document as you work. Pass --resume to restore its
-globals, block outputs, and selected block; nothing about the spec's state model
-changes (SPEC.md §9). Edited executable blocks start fresh and later outputs are
-marked stale. Press r in the TUI to reload an edited document.
+The TUI saves one session per document once you run a block. Pass --resume to
+restore its globals, block outputs, and selected block; nothing about the spec's
+state model changes (SPEC.md §9). Sessions can hold secrets from globals and
+output: --no-session (or save_sessions: false in the config) turns saving off.
+Edited executable blocks start fresh and later outputs are marked stale. Press r
+in the TUI to reload an edited document.
 
 Exit codes: 0 success · 1 execution failed · 2 spec/usage error (SPEC.md §6.2)`
 
@@ -199,7 +201,9 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, usage)
 		return 2
 	}
-	if hasResumeFlag(args) {
+	// --resume belongs to the viewer: `exmd check DOC --resume` stays a
+	// check (and reports the stray flag) rather than becoming a resume.
+	if !isVerb(args[0]) && hasResumeFlag(args) {
 		return cmdResume(args)
 	}
 	switch args[0] {
@@ -218,13 +222,34 @@ func run(args []string) int {
 		fmt.Printf("exmd version %s (spec v1)\n", version)
 		return 0
 	default:
-		if strings.HasPrefix(args[0], "-") {
+		if strings.HasPrefix(args[0], "-") && !isViewerFlag(args[0]) {
 			fmt.Fprintf(os.Stderr, "unknown flag or command %q\n\n", args[0])
 			fmt.Fprintln(os.Stderr, usage)
 			return 2
 		}
 		return cmdTUI(args)
 	}
+}
+
+// isViewerFlag reports whether arg is a viewer flag, which may come before
+// the document like every other flag.
+func isViewerFlag(arg string) bool {
+	name, _, _ := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+	switch name {
+	case "set", "theme", "no-session":
+		return true
+	}
+	return false
+}
+
+// isVerb reports whether arg names a headless command or a help/version
+// request rather than a document.
+func isVerb(arg string) bool {
+	switch arg {
+	case "check", "list", "globals", "print", "help", "--help", "-h", "version", "--version", "-v":
+		return true
+	}
+	return false
 }
 
 // loadDoc is the shared load step for CLI verbs: I/O errors exit 2, all
