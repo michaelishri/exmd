@@ -101,7 +101,7 @@ func TestAcceptanceQuitMidRunSavesRealSnapshot(t *testing.T) {
 		}
 	}
 	time.Sleep(50 * time.Millisecond)
-	mm, _ = mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
 	s := savedSnapshotFor(t, path)
 	if len(s.Blocks) != 1 || s.Blocks[0].Active || !s.Blocks[0].Done {
@@ -293,7 +293,7 @@ func TestAcceptanceLatestSnapshotWins(t *testing.T) {
 	path := acceptanceDoc(t)
 	m := acceptanceViewer(t, path, nil)
 	m = runBlockAt(t, m, 0)
-	m = runBlockAt(t, m, 1)
+	runBlockAt(t, m, 1)
 
 	s := savedSnapshotFor(t, path)
 	if len(s.Blocks) != 2 || s.Next != 2 {
