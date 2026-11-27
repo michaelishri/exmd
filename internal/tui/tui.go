@@ -61,6 +61,10 @@ type Model struct {
 	blankRow, gutterRow string
 	shifts              []int // inserted box lines per rendered line
 
+	// raw caches the document lines with inline output boxes spliced in,
+	// rebuilt by setContent. Mouse selection only repaints from it.
+	raw []string
+
 	overrides map[string]string
 	theme     theme.Theme
 
@@ -182,6 +186,8 @@ func applyRestore(m *Model, plan *session.RestorePlan) int {
 	for index, br := range plan.Blocks {
 		st := m.stateFor(index)
 		st.lines = append([]string(nil), br.Lines...)
+		st.dropped = br.Dropped
+		st.urlsValid = false
 		st.status = br.Status
 		st.done = br.Done
 		st.active = false
@@ -247,7 +253,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case inlineEventMsg:
-		m.applyInlineEvent(msg.index, msg.ev)
+		m.applyInlineEvents(msg.index, msg.evs)
 		if m.inlineActive() {
 			return m, m.inlineListenCmd(m.stateFor(msg.index), msg.index)
 		}
@@ -301,14 +307,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) bool {
 		} else {
 			m.sel.clear()
 		}
-		m.setContent()
+		m.paintSelection()
 		return true
 
 	case m.sel.dragging && msg.Action == tea.MouseActionMotion:
 		// Some terminals report a drag as a release event (see below).
 		if p, ok := m.mousePoint(msg); ok {
 			m.sel.head = p
-			m.setContent()
+			m.paintSelection()
 		}
 		return true
 
@@ -333,7 +339,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) bool {
 			}
 		}
 		m.sel.clear()
-		m.setContent()
+		m.paintSelection()
 		return true
 	}
 	return false
@@ -366,7 +372,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func (m *Model) clearTransientState() {
 	if m.sel.set {
 		m.sel.clear()
-		m.setContent()
+		m.paintSelection()
 		return
 	}
 	if m.blockSel >= 0 {
@@ -487,7 +493,7 @@ func (m *Model) copyBlockURL() tea.Cmd {
 		m.flash = "no URL in this block's output"
 		return nil
 	}
-	urls := outputURLs(st.copiedText())
+	urls := st.outputURLs()
 	if len(urls) == 0 {
 		m.flash = "no URL in this block's output"
 		return nil
@@ -513,7 +519,7 @@ func (m Model) focusedHasURL() bool {
 		return false
 	}
 	st := m.inline[m.blockSel]
-	return st != nil && len(outputURLs(st.copiedText())) > 0
+	return st != nil && len(st.outputURLs()) > 0
 }
 
 // handleOutlineKey moves the sidebar selection. The outline consumes every
@@ -719,7 +725,7 @@ func (m *Model) selectBlock(index int) {
 	if heading := m.headingForBlock(); heading >= 0 {
 		m.outline.sel = heading
 	}
-	m.saveSession()
+	m.saveSessionThrottled() // cursor moves are frequent; quitting saves the last one
 }
 
 // exitBlockMode leaves executable-block selection and highlights the
@@ -731,7 +737,7 @@ func (m *Model) exitBlockMode() {
 		m.outline.sel = idx
 	}
 	m.jumpToSelected()
-	m.saveSession()
+	m.saveSessionThrottled()
 }
 
 // headingForBlock returns the outline entry index of the heading containing
@@ -782,7 +788,7 @@ func (m *Model) maxScroll() int {
 	if m.out == nil {
 		return 0
 	}
-	return max(0, len(m.contentLines())-m.content.Height)
+	return max(0, len(m.rawContentLines())-m.content.Height)
 }
 
 // updateSpy mirrors the content scroll position into the sidebar cursor:
@@ -1071,11 +1077,19 @@ func (m Model) railView() string {
 // under its block, into the viewport.
 func (m *Model) setContent() {
 	m.updateShifts()
+	m.raw = m.buildContentLines()
+	m.paintSelection()
+}
+
+// paintSelection reinstalls the cached content with the current mouse
+// selection highlighted. A drag only changes the highlight, so it skips
+// rebuilding the document.
+func (m *Model) paintSelection() {
 	m.content.SetContent(strings.Join(m.contentLines(), "\n"))
 }
 
 // updateShifts caches how many output rows each rendered line gains from
-// inline boxes. One pass replaces a scan of every box on every lookup.
+// inline boxes, in one pass over the lines plus one per box.
 func (m *Model) updateShifts() {
 	if m.out == nil {
 		m.shifts = nil
@@ -1086,16 +1100,29 @@ func (m *Model) updateShifts() {
 		if st == nil || len(st.box) == 0 || !m.validBlock(index) {
 			continue
 		}
-		for line := m.out.Blocks[index].End; line < len(shifts); line++ {
-			shifts[line] += len(st.box)
+		if end := m.out.Blocks[index].End; end < len(shifts) {
+			shifts[end] += len(st.box)
 		}
+	}
+	for line := 1; line < len(shifts); line++ {
+		shifts[line] += shifts[line-1]
 	}
 	m.shifts = shifts
 }
 
-// rawContentLines returns the rendered document with the inline output box
-// inserted at the end of the executing block, without selection styling.
+// rawContentLines returns the rendered document with the inline output
+// boxes spliced in, without selection styling. The result is shared with
+// the cache: callers must not modify it.
 func (m Model) rawContentLines() []string {
+	if m.raw != nil {
+		return m.raw
+	}
+	return m.buildContentLines()
+}
+
+// buildContentLines splices each inline output box in at the end of its
+// block.
+func (m Model) buildContentLines() []string {
 	if m.out == nil {
 		return nil
 	}
@@ -1125,11 +1152,12 @@ func (m Model) rawContentLines() []string {
 // contentLines returns what the viewport shows: the document plus the
 // highlighted span of an active mouse selection.
 func (m Model) contentLines() []string {
-	out := m.rawContentLines()
+	raw := m.rawContentLines()
 	from, to, ok := m.sel.ordered()
 	if !ok {
-		return out
+		return raw
 	}
+	out := append([]string(nil), raw...)
 	for line := from.line; line <= to.line && line < len(out); line++ {
 		lo, hi := 0, ansi.StringWidth(out[line])
 		if line == from.line {

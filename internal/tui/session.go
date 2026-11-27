@@ -112,12 +112,13 @@ func (m *Model) captureSnapshot() {
 			continue
 		}
 		bs := session.BlockSnapshot{
-			Index:  index,
-			Lines:  append([]string(nil), st.lines...),
-			Status: st.status,
-			Done:   st.done,
-			Active: st.active,
-			Stale:  st.stale,
+			Index:   index,
+			Lines:   append([]string(nil), st.lines...),
+			Dropped: st.dropped,
+			Status:  st.status,
+			Done:    st.done,
+			Active:  st.active,
+			Stale:   st.stale,
 		}
 		if index < len(m.blockKeys) {
 			bs.Key = m.blockKeys[index]

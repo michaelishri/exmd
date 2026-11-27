@@ -51,14 +51,15 @@ type Snapshot struct {
 // BlockSnapshot is one block's visible output and status. Key identifies the
 // executable block by content, so it survives insertions and renumbering.
 type BlockSnapshot struct {
-	Key    string   `yaml:"key"`
-	Index  int      `yaml:"index"`
-	Lines  []string `yaml:"lines,omitempty"`
-	Status int      `yaml:"status,omitempty"`
-	Done   bool     `yaml:"done,omitempty"`
-	Active bool     `yaml:"active,omitempty"`
-	Err    string   `yaml:"err,omitempty"`
-	Stale  bool     `yaml:"stale,omitempty"`
+	Key     string   `yaml:"key"`
+	Index   int      `yaml:"index"`
+	Lines   []string `yaml:"lines,omitempty"`
+	Dropped int      `yaml:"dropped,omitempty"` // earlier lines not kept
+	Status  int      `yaml:"status,omitempty"`
+	Done    bool     `yaml:"done,omitempty"`
+	Active  bool     `yaml:"active,omitempty"`
+	Err     string   `yaml:"err,omitempty"`
+	Stale   bool     `yaml:"stale,omitempty"`
 }
 
 // RunSnapshot is one completed execution, recorded in execution order. After
@@ -81,12 +82,13 @@ type RestorePlan struct {
 
 // BlockRestore is one block's restored presentation state.
 type BlockRestore struct {
-	Lines  []string
-	Status int
-	Done   bool
-	Active bool
-	Err    string
-	Stale  bool
+	Lines   []string
+	Dropped int
+	Status  int
+	Done    bool
+	Active  bool
+	Err     string
+	Stale   bool
 }
 
 // Dir is the directory holding session snapshots. It lives alongside the
