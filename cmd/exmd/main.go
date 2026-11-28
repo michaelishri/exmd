@@ -23,7 +23,7 @@ import (
 // version is the application version. Release builds stamp it with
 // -ldflags "-X main.version=..." (docs/releasing.md), so a binary always
 // reports the tag it was built from.
-var version = "0.6.2"
+var version = "0.7.0"
 
 const usage = `exmd — executable Markdown (runbooks)
 
