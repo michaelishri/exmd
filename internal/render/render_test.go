@@ -4,9 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -84,9 +82,6 @@ func TestRenderDeterministic(t *testing.T) {
 // covers its code text, not just its badge row — chroma emits a per-token
 // reset that would otherwise clear the background.
 func TestExecCodeRowsCarryBackground(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
 
 	execPanelEscape := backgroundEscape(theme.Dark.ExecPanel)
 	canvasEscape := backgroundEscape(theme.Dark.Background)
@@ -143,9 +138,6 @@ func TestExecCodeRowsCarryBackground(t *testing.T) {
 // TestLastBlockExtentExcludesSpacingRow checks that the final block's rail
 // extent stops before the trailing blank row, like every other block.
 func TestLastBlockExtentExcludesSpacingRow(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
 
 	d := loadDemo(t)
 	out := Render(d, 80, theme.Dark)

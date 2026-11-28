@@ -1,11 +1,12 @@
 package render
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )
@@ -13,19 +14,20 @@ import (
 // sgr matches an ANSI Select Graphic Rendition sequence.
 var sgr = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 
-// backgroundEscape converts a theme color into a background SGR. It uses
-// termenv's conversion so the hand-painted canvas matches the escapes
-// lipgloss emits for the same token in the chrome. An empty token yields no
-// escape, which is how "notty" renders plain text.
+// backgroundEscape converts a theme color into a true-color background SGR,
+// the same encoding lipgloss emits for the token in the chrome. The output
+// layer (Bubble Tea, or the CLI's color-profile writer) reduces it for
+// terminals with fewer colors. An empty or invalid token yields no escape,
+// which is how "notty" renders plain text.
 func backgroundEscape(c theme.Color) string {
 	if c == "" {
 		return ""
 	}
-	seq := termenv.TrueColor.Color(string(c)).Sequence(true)
-	if seq == "" {
+	r, g, b, a := lipgloss.Color(string(c)).RGBA()
+	if a == 0 {
 		return ""
 	}
-	return "\x1b[" + seq + "m"
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r>>8, g>>8, b>>8)
 }
 
 // PaintCanvas paints the entire view with the theme's canvas background.

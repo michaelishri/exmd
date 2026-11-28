@@ -3,9 +3,9 @@ package render
 import (
 	"testing"
 
+	gansi "charm.land/glamour/v2/ansi"
 	"github.com/alecthomas/chroma/v2"
 	chromastyles "github.com/alecthomas/chroma/v2/styles"
-	gansi "github.com/charmbracelet/glamour/ansi"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )

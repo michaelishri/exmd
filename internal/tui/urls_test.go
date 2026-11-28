@@ -2,14 +2,13 @@ package tui
 
 import (
 	"encoding/base64"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // clipPayloads decodes each OSC 52 copy sequence in a raw clipboard write.
@@ -36,7 +35,8 @@ func clipPayloads(t *testing.T, seq string) []string {
 }
 
 func pressU(m Model) Model {
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: 'u', Text: string('u')})
+	recordRaw(cmd)
 	return mm.(Model)
 }
 
@@ -179,24 +179,5 @@ func TestURLHintAppearsOnlyWithURLs(t *testing.T) {
 	m = runSelectedBlock(t, m)
 	if !strings.Contains(m.keyHints(), "u url") {
 		t.Fatalf("u hint missing with URLs in output: %q", m.keyHints())
-	}
-}
-
-func TestCopyURLFailureKeepsCursor(t *testing.T) {
-	m := runSelectedBlock(t, enterBlockModeFromFirstHeading(t,
-		newViewerFromDoc(t, 120, 40, "testdata/urls.md", nil)))
-
-	prev := clipboardOut
-	clipboardOut = errWriter{err: errors.New("clipboard unavailable")}
-	t.Setenv("TERM", "xterm-256color")
-	m = pressU(m)
-	if !strings.Contains(m.flash, "copy failed: clipboard unavailable") {
-		t.Fatalf("footer reaction = %q, want the write error", m.flash)
-	}
-	clipboardOut = prev
-
-	seq := captureClipboard(t, func() { m = pressU(m) })
-	if got := clipPayloads(t, seq); !slices.Equal(got, []string{"https://example.com/one"}) {
-		t.Fatalf("copied URL after failure = %v, want to retry the first URL", got)
 	}
 }

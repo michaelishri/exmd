@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/michaelishri/exmd/internal/session"
 )
@@ -22,7 +22,7 @@ func TestOpeningWithoutRunningKeepsSavedSession(t *testing.T) {
 	fresh := acceptanceViewer(t, path, nil)
 	fresh.selectBlock(1)
 	fresh = pressKey(fresh, runeKey('r'))
-	fresh.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	fresh.Update(tea.KeyPressMsg{Code: 'q', Text: string('q')})
 	if fresh.SessionSaved() {
 		t.Fatal("a viewer that ran nothing reported a save")
 	}

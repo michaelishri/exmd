@@ -1,7 +1,7 @@
 package tui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -123,7 +123,7 @@ func (m *Model) commitTheme() {
 
 // handleSettingsKey routes keys while the panel is open. ctrl+c passes
 // through so the user can always quit.
-func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *Model) handleSettingsKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if msg.String() == "ctrl+c" {
 		return nil, false
 	}

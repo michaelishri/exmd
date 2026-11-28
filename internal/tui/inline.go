@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/exec"
@@ -308,8 +308,8 @@ func (m *Model) refreshInlineContent(index int) {
 		return
 	}
 	last := m.displayLine(m.out.Blocks[index].End-1) + len(st.box)
-	want := clamp(last-m.content.Height+1, 0, m.maxScroll())
-	if m.content.YOffset < want {
+	want := clamp(last-m.content.Height()+1, 0, m.maxScroll())
+	if m.content.YOffset() < want {
 		m.content.SetYOffset(want)
 	}
 }
@@ -322,7 +322,7 @@ func (m *Model) rebuildInlineBox(index int) {
 		st.box = nil
 		return
 	}
-	w := m.content.Width
+	w := m.content.Width()
 	indent := m.inlineIndent(index)
 	// A resize, a theme change or a new run invalidates the rendered rows.
 	// Otherwise only the lines added since the last event need styling
@@ -333,9 +333,9 @@ func (m *Model) rebuildInlineBox(index int) {
 		st.boxWidth, st.boxIndent, st.boxTheme = w, indent, m.theme.Name
 	}
 
-	surface := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.ExecPanel))
-	body := surface.Foreground(lipgloss.Color(m.theme.Text))
-	muted := surface.Foreground(lipgloss.Color(m.theme.TextMuted))
+	surface := lipgloss.NewStyle().Background(lipgloss.Color(string(m.theme.ExecPanel)))
+	body := surface.Foreground(lipgloss.Color(string(m.theme.Text)))
+	muted := surface.Foreground(lipgloss.Color(string(m.theme.TextMuted)))
 	prefix := strings.Repeat(" ", max(0, indent-1)) // one plain column is already there
 	room := max(0, w-1-len(prefix))
 	row := func(style lipgloss.Style, text string) string {

@@ -5,10 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -20,7 +19,7 @@ func pressKey(m Model, msg tea.KeyMsg) Model {
 }
 
 func runeKey(r rune) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }
 
 func TestSettingsOpenAndPages(t *testing.T) {
@@ -34,7 +33,7 @@ func TestSettingsOpenAndPages(t *testing.T) {
 	if m.settings.page != settingsMenu {
 		t.Fatalf("page = %v, want menu", m.settings.page)
 	}
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Settings") {
 		t.Fatal("settings panel missing from view")
 	}
@@ -45,11 +44,11 @@ func TestSettingsOpenAndPages(t *testing.T) {
 		t.Fatalf("menu hints = %q", hints)
 	}
 
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.settings.page != settingsThemePage {
 		t.Fatalf("page = %v, want theme list", m.settings.page)
 	}
-	if !strings.Contains(m.View(), "Settings / Theme") {
+	if !strings.Contains(m.View().Content, "Settings / Theme") {
 		t.Fatal("theme list missing from view")
 	}
 	if hints := m.keyHints(); !strings.Contains(hints, "preview") {
@@ -60,15 +59,13 @@ func TestSettingsOpenAndPages(t *testing.T) {
 // TestSettingsFooterBand checks that the theme page gets a distinct sidebar
 // footer band, and that pages without hints leave the whole pane to settings.
 func TestSettingsFooterBand(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 
 	m := newViewer(t, 120, 40)
-	leftWidth := railWidth + m.content.Width + gutterWidth
+	leftWidth := railWidth + m.content.Width() + gutterWidth
 	sidebar := func(m Model, fromEnd int) string {
-		lines := strings.Split(m.View(), "\n")
+		lines := strings.Split(m.View().Content, "\n")
 		return string([]rune(lines[len(lines)-fromEnd])[leftWidth:])
 	}
 
@@ -77,25 +74,24 @@ func TestSettingsFooterBand(t *testing.T) {
 	if !strings.Contains(ansi.Strip(band), "enter open") {
 		t.Fatalf("menu page footer hints missing: %q", band)
 	}
-	want := termenv.TrueColor.
-		Color(string(theme.Lift(theme.Dark.BackgroundPanel, 0.10))).Sequence(true)
+	want := trueColorSeq(theme.Lift(theme.Dark.BackgroundPanel, 0.10), true)
 	if !strings.Contains(sidebar(m, 3), want) || !strings.Contains(band, want) {
 		t.Fatalf("menu footer band has no distinct shade (%s): %q", want, band)
 	}
 
 	// The left footer must not repeat the sidebar hints.
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	left := string([]rune(ansi.Strip(lines[len(lines)-2]))[:leftWidth])
 	if strings.Contains(left, "enter open") {
 		t.Fatalf("settings hints duplicated in the left footer: %q", left)
 	}
 
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	band = sidebar(m, 2)
 	if !strings.Contains(ansi.Strip(band), "preview") {
 		t.Fatalf("theme page footer hints missing: %q", band)
 	}
-	if n := strings.Count(ansi.Strip(m.View()), "preview"); n != 1 {
+	if n := strings.Count(ansi.Strip(m.View().Content), "preview"); n != 1 {
 		t.Fatalf("theme hints appear %d times, want 1", n)
 	}
 	if !strings.Contains(sidebar(m, 3), want) || !strings.Contains(band, want) {
@@ -104,16 +100,14 @@ func TestSettingsFooterBand(t *testing.T) {
 }
 
 func TestSettingsLivePreviewAndRevert(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 	m := newViewer(t, 120, 40)
 	original := m.theme.Name
 
 	m = pressKey(m, runeKey(','))
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 
 	if m.theme.Name == original {
 		t.Fatal("arrow key did not preview a different theme")
@@ -125,7 +119,7 @@ func TestSettingsLivePreviewAndRevert(t *testing.T) {
 		t.Fatal("preview did not rebuild the viewer styles")
 	}
 
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
 	if m.settings.open {
 		t.Fatal("esc did not close settings")
 	}
@@ -148,10 +142,10 @@ func TestSettingsCommitSaves(t *testing.T) {
 
 	m := newViewer(t, 120, 40)
 	m = pressKey(m, runeKey(','))
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	want := m.theme.Name
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if !called {
 		t.Fatal("theme was not saved")
@@ -175,10 +169,10 @@ func TestSettingsSaveFailureKeepsSessionTheme(t *testing.T) {
 
 	m := newViewer(t, 120, 40)
 	m = pressKey(m, runeKey(','))
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	want := m.theme.Name
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if m.theme.Name != want {
 		t.Fatalf("theme after failed save = %q, want %q", m.theme.Name, want)
@@ -198,7 +192,7 @@ func TestSettingsForcesSidebarOnNarrowTerminal(t *testing.T) {
 	if !m.outline.visible {
 		t.Fatal("settings did not open the sidebar slot")
 	}
-	if !strings.Contains(m.View(), "Settings") {
+	if !strings.Contains(m.View().Content, "Settings") {
 		t.Fatal("settings panel missing on narrow terminal")
 	}
 }
@@ -214,10 +208,10 @@ func TestSettingsCommitKeepsOtherPreferences(t *testing.T) {
 	}
 	m := newViewer(t, 120, 40)
 	m = pressKey(m, runeKey(','))
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	want := m.theme.Name
-	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	c, err := config.Load()
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/exec"
@@ -24,7 +24,7 @@ func resumeViewer(t *testing.T, overrides map[string]string) Model {
 func runBlockAt(t *testing.T, m Model, index int) Model {
 	t.Helper()
 	m.blockSel = index
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	return pump(t, mm.(Model), cmd)
 }
 

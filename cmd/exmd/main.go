@@ -6,17 +6,18 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/render"
 	"github.com/michaelishri/exmd/internal/termsafe"
 	"github.com/michaelishri/exmd/internal/theme"
-	"github.com/muesli/termenv"
 )
 
 // version is the application version. Release builds stamp it with
@@ -89,15 +90,26 @@ func diagnosticTheme() theme.Theme {
 // invocation, so headless output agrees with the TUI and print.
 func setDiagnosticTheme(th theme.Theme) {
 	diagnosticPalette = th
-	styleErr = lipgloss.NewStyle().Foreground(lipgloss.Color(th.Error))
-	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color(th.Warning))
-	styleDim = lipgloss.NewStyle().Foreground(lipgloss.Color(th.TextMuted))
+	styleErr = lipgloss.NewStyle().Foreground(lipgloss.Color(string(th.Error)))
+	styleWarn = lipgloss.NewStyle().Foreground(lipgloss.Color(string(th.Warning)))
+	styleDim = lipgloss.NewStyle().Foreground(lipgloss.Color(string(th.TextMuted)))
 }
 
 // printThemeLine writes a line with the same canvas rule as the TUI and
 // print, so headless output never falls back to the terminal's palette.
 func printThemeLine(s string) {
-	fmt.Println(render.PaintCanvas(s, lipgloss.Width(s), diagnosticPalette))
+	fmt.Fprintln(stdout, render.PaintCanvas(s, lipgloss.Width(s), diagnosticPalette))
+}
+
+// stdout and stderr reduce styled output to what the terminal can show:
+// true color passes through, 256- and 16-color terminals get the nearest
+// colors, and a pipe or NO_COLOR gets plain text. They are bound to the
+// process's streams at the start of every run.
+var stdout, stderr io.Writer = os.Stdout, os.Stderr
+
+func bindOutput() {
+	stdout = colorprofile.NewWriter(os.Stdout, os.Environ())
+	stderr = colorprofile.NewWriter(os.Stderr, os.Environ())
 }
 
 func main() {
@@ -106,7 +118,7 @@ func main() {
 
 // colorSupported reports whether the terminal can display color.
 func colorSupported() bool {
-	return lipgloss.ColorProfile() != termenv.Ascii
+	return colorprofile.Detect(os.Stdout, os.Environ()) > colorprofile.ASCII
 }
 
 // parseFlag extracts every occurrence of a flag in any position, accepting
@@ -199,6 +211,7 @@ func hasResumeFlag(args []string) bool {
 func run(args []string) int {
 	// Verbs without --theme use the default diagnostics palette. Commands
 	// that accept --theme override it after parsing their flags.
+	bindOutput()
 	setDiagnosticTheme(diagnosticTheme())
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, usage)
@@ -287,7 +300,7 @@ func printDiagnostics(res *doc.Result) {
 
 // printTable prints tab-aligned rows with a header.
 func printTable(headers []string, rows [][]string) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
 	for _, row := range rows {
 		fmt.Fprintln(w, strings.Join(row, "\t"))

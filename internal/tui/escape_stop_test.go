@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
-func escKey() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyEsc} }
+func escKey() tea.KeyMsg { return tea.KeyPressMsg{Code: tea.KeyEsc} }
 
 // TestEscapeStopsRunningBlock checks that Esc owns the stop action and
 // keeps the block selected while it is running.
@@ -57,7 +57,7 @@ func TestSKeyNoLongerStopsRuns(t *testing.T) {
 	cancelled := false
 	st.cancel = func() { cancelled = true }
 
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 's', Text: string('s')})
 	_ = mm
 	if cancelled {
 		t.Fatal("s still stops a running block")
@@ -70,7 +70,7 @@ func TestEscapeInterruptsRealRun(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := newViewerFromDoc(t, 120, 40, "testdata/sleep.md", nil)
 	m.blockSel = 0
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	started := cmd()
 	batch, ok := started.(tea.BatchMsg)
 	if !ok {

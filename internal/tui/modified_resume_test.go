@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestReloadChangedBlockMarksStale(t *testing.T) {
@@ -26,7 +26,7 @@ func TestReloadChangedBlockMarksStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: string('r')})
 	m = mm.(Model)
 	if !strings.Contains(string(m.doc.Source), "two changed") {
 		t.Fatal("reload did not pick up the edited document")
@@ -40,7 +40,7 @@ func TestReloadChangedBlockMarksStale(t *testing.T) {
 	if !strings.Contains(m.flash, "reloaded") {
 		t.Fatalf("no reload summary: %q", m.flash)
 	}
-	if !strings.Contains(m.View(), "stale") {
+	if !strings.Contains(m.View().Content, "stale") {
 		t.Fatal("stale badge missing from the view")
 	}
 }
@@ -54,7 +54,7 @@ func TestReloadParseErrorKeepsDocument(t *testing.T) {
 	if err := os.WriteFile(path, []byte("---\ntype: runbook\nglobals: not-a-mapping\n---\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: string('r')})
 	m = mm.(Model)
 	if string(m.doc.Source) != before {
 		t.Fatal("invalid reload replaced the current document")
@@ -68,7 +68,7 @@ func TestReloadBlockedWhileRunning(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := acceptanceViewer(t, acceptanceDoc(t), nil)
 	m.stateFor(0).active = true
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: string('r')})
 	m = mm.(Model)
 	if !strings.Contains(m.flash, "stop the running block") {
 		t.Fatalf("reload was not blocked: %q", m.flash)
@@ -98,7 +98,7 @@ func TestRerunMarksLaterOutputsStale(t *testing.T) {
 func TestRDoesNotRunBlock(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := enterBlockModeFromFirstHeading(t, acceptanceViewer(t, acceptanceDoc(t), nil))
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: string('r')})
 	m = mm.(Model)
 	if st := m.inline[0]; st != nil && len(st.lines) > 0 {
 		t.Fatalf("r unexpectedly ran the block: %v", st.lines)

@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/glamour/styles"
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
 	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/doc"

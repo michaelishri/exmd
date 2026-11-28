@@ -6,10 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 // TestOutlinePaddingAndSpacing checks the sidebar geometry: the strip is
@@ -19,25 +18,25 @@ import (
 // rest of the strip, flush to the right edge.
 func TestOutlinePaddingAndSpacing(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	rows := m.content.Height
+	rows := m.content.Height()
 	v := m.outline.view(rows, false, m.styles)
-	lines := strings.Split(v, "\n")
+	lines := strings.Split(ansi.Strip(v), "\n")
 	if len(lines) != rows {
 		t.Fatalf("sidebar rows = %d, want %d", len(lines), rows)
 	}
 
 	// A blank pad row, then the title (the first h1, two columns in), then
 	// another pad row.
-	if lines[0] == "" || strings.TrimSpace(lines[0]) != "" {
+	if lines[0] == "" || strings.TrimSpace(ansi.Strip(lines[0])) != "" {
 		t.Fatalf("top pad row missing: %q", lines[0])
 	}
 	if !strings.Contains(lines[1], "exmd feature tour") {
 		t.Fatalf("title row missing the first h1: %q", lines[1])
 	}
-	if !strings.HasPrefix(lines[1], "  ") {
+	if !strings.HasPrefix(ansi.Strip(lines[1]), "  ") {
 		t.Fatalf("title not two columns in: %q", lines[1])
 	}
-	if lines[2] == "" || strings.TrimSpace(lines[2]) != "" {
+	if lines[2] == "" || strings.TrimSpace(ansi.Strip(lines[2])) != "" {
 		t.Fatalf("pad row missing under the title: %q", lines[2])
 	}
 
@@ -80,13 +79,13 @@ func TestOutlinePaddingAndSpacing(t *testing.T) {
 // section), aligned to the content row the jump placed at the top.
 func TestRailMarksHeadingLine(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	if v := m.View(); strings.Contains(v, "▌") {
+	if v := m.View().Content; strings.Contains(v, "▌") {
 		t.Fatal("no bar should render without a selection")
 	}
 
 	// Focus the sidebar and select the first entry.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got := mm.(Model)
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
@@ -96,7 +95,7 @@ func TestRailMarksHeadingLine(t *testing.T) {
 	// separator row is at the top): exactly one rail bar, on the same body
 	// row as the heading's text, at the rail column (the leftmost column).
 	// The sidebar's border bars live further right and don't count.
-	v := got.View()
+	v := got.View().Content
 	railRows := 0
 	found := false
 	for _, line := range strings.Split(v, "\n") {
@@ -122,10 +121,10 @@ func TestRailMarksHeadingLine(t *testing.T) {
 // state and that the viewport frame never renders.
 func TestFocusBorderMoves(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	resting := m.View()
+	resting := m.View().Content
 
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	focused := mm.(Model).View()
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	focused := mm.(Model).View().Content
 
 	for name, v := range map[string]string{"resting": resting, "focused": focused} {
 		if n := strings.Count(v, "│"); n != 0 {
@@ -154,8 +153,8 @@ func TestSidebarFocusKeepsLayout(t *testing.T) {
 	}
 
 	// Focus adds no border or frame in the full view either.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	v := mm.(Model).View()
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	v := mm.(Model).View().Content
 	if strings.Contains(v, "│") || strings.Contains(v, "┌") {
 		t.Fatal("focus added border or frame chrome")
 	}
@@ -167,9 +166,7 @@ func TestSidebarFocusKeepsLayout(t *testing.T) {
 // title row is excluded: at the top of the document it holds the cursor.)
 // TrueColor is forced so the exact colors are assertable.
 func TestSidebarFocusShading(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	unfocused := strings.Split(m.outline.view(m.paneHeight, false, m.styles), "\n")
@@ -182,7 +179,7 @@ func TestSidebarFocusShading(t *testing.T) {
 	if !strings.Contains(unfocused[3], "48;2;24;24;30") {
 		t.Fatalf("resting row should use the panel background: %q", unfocused[3])
 	}
-	if !strings.Contains(unfocused[3], "38;2;227;227;233") {
+	if !strings.Contains(unfocused[3], "38;2;228;228;233") {
 		t.Fatalf("resting row should keep its bright text color: %q", unfocused[3])
 	}
 	if !strings.Contains(focused[3], "48;2;36;36;44") {
@@ -190,7 +187,7 @@ func TestSidebarFocusShading(t *testing.T) {
 	}
 
 	// Neither focus state draws a border beside the strip.
-	if strings.Contains(m.View(), "│") || strings.Contains(gotFocusedView(t), "│") {
+	if strings.Contains(m.View().Content, "│") || strings.Contains(gotFocusedView(t), "│") {
 		t.Fatal("sidebar should have no left border")
 	}
 }
@@ -199,24 +196,22 @@ func TestSidebarFocusShading(t *testing.T) {
 func gotFocusedView(t *testing.T) string {
 	t.Helper()
 	m := newViewer(t, 120, 40)
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	return mm.(Model).View()
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	return mm.(Model).View().Content
 }
 
 // TestSelectionKeepsTextColumn checks that selecting an entry does not
 // shift its text: the stripped row is identical before and after, and the
 // background carries the selection instead.
 func TestSelectionKeepsTextColumn(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.ANSI)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.ANSI)()
 
 	m := newViewer(t, 120, 40)
 	before := strings.Split(m.outline.view(m.paneHeight, false, m.styles), "\n")
 
 	// Focus the sidebar and select the first entry.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got := mm.(Model)
 	after := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")
 
@@ -304,29 +299,27 @@ spec: 1
 // TestTitleRowIsSelectable checks that the title row can hold the sidebar
 // cursor and that selecting it scrolls to the very top of the document.
 func TestTitleRowIsSelectable(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.ANSI)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.ANSI)()
 
 	m := newViewer(t, 120, 40)
 	// Focus the sidebar and pick the first heading, scrolling off the top.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got := mm.(Model)
-	if got.outline.sel != 0 || got.content.YOffset == 0 {
+	if got.outline.sel != 0 || got.content.YOffset() == 0 {
 		t.Fatalf("setup: sel = %d, YOffset = %d; want first heading, scrolled down",
-			got.outline.sel, got.content.YOffset)
+			got.outline.sel, got.content.YOffset())
 	}
 	unselected := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")[1]
 
 	// Moving up from the first entry lands on the title and jumps home.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'k', Text: string('k')})
 	got = mm.(Model)
 	if got.outline.sel != -1 {
 		t.Fatalf("sel after k = %d, want -1 (title)", got.outline.sel)
 	}
-	if got.content.YOffset != 0 {
-		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset)
+	if got.content.YOffset() != 0 {
+		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset())
 	}
 	selected := strings.Split(got.outline.view(got.paneHeight, false, got.styles), "\n")[1]
 	if ansi.Strip(selected) != ansi.Strip(unselected) {
@@ -338,20 +331,20 @@ func TestTitleRowIsSelectable(t *testing.T) {
 	}
 
 	// g selects the title from anywhere else in the outline, too.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'G', Text: string('G')})
 	got = mm.(Model)
 	if got.outline.sel != len(got.outline.entries)-1 {
 		t.Fatalf("G did not reach the last entry: sel = %d", got.outline.sel)
 	}
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'g', Text: string('g')})
 	got = mm.(Model)
-	if got.outline.sel != -1 || got.content.YOffset != 0 {
+	if got.outline.sel != -1 || got.content.YOffset() != 0 {
 		t.Fatalf("g: sel = %d, YOffset = %d; want title at the top",
-			got.outline.sel, got.content.YOffset)
+			got.outline.sel, got.content.YOffset())
 	}
 
 	// Down from the title returns to the first entry.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got = mm.(Model)
 	if got.outline.sel != 0 {
 		t.Fatalf("j from the title = %d, want 0", got.outline.sel)
@@ -371,9 +364,7 @@ func TestOutlineTitleFallback(t *testing.T) {
 // than h3 rows, and the title row is bold. The test forces a color profile
 // so the ANSI escapes differ.
 func TestHeadingRowShading(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.ANSI)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.ANSI)()
 
 	m := newViewer(t, 120, 40)
 	v := m.outline.view(m.paneHeight, false, m.styles)

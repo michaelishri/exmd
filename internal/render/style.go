@@ -3,10 +3,10 @@ package render
 import (
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	gansi "github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	gansi "charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
+	"charm.land/lipgloss/v2"
 	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/michaelishri/exmd/internal/doc"
@@ -45,6 +45,9 @@ func (o *Output) appendGlamour(chunk string, r *glamour.TermRenderer, canvas str
 		o.appendPlain(chunk)
 		return
 	}
+	// Glamour writes resets in the short form; the canvas and exec painters
+	// look for the long one.
+	rendered = strings.ReplaceAll(rendered, "\x1b[m", "\x1b[0m")
 	if canvas != "" {
 		rendered = strings.ReplaceAll(rendered, "\x1b[0m", "\x1b[0m"+canvas)
 	}
@@ -87,8 +90,8 @@ func (o *Output) appendBadge(b *doc.Block, th theme.Theme) {
 	if th.Name == theme.Notty.Name {
 		line = "  ▸ " + label
 	} else {
-		accent := lipgloss.NewStyle().Foreground(lipgloss.Color(th.Accent))
-		muted := lipgloss.NewStyle().Foreground(lipgloss.Color(th.TextMuted))
+		accent := lipgloss.NewStyle().Foreground(lipgloss.Color(string(th.Accent)))
+		muted := lipgloss.NewStyle().Foreground(lipgloss.Color(string(th.TextMuted)))
 		line = "  " + accent.Render("▸") + " " + muted.Render(label)
 	}
 	o.Lines = append(o.Lines, xansi.Truncate(line, max(1, o.Width), "…"))

@@ -1,23 +1,18 @@
 package tui
 
 import (
-	"io"
 	"os"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/aymanbagabas/go-osc52/v2"
 )
 
-// clipboardOut receives OSC 52 sequences. It is a variable so tests can
-// capture what would be written to the terminal without touching a real
-// clipboard.
-var clipboardOut io.Writer = os.Stdout
-
-// copyToClipboard writes text to the terminal's clipboard with OSC 52. The
-// sequence travels through the terminal, so it works over SSH and needs no
-// external clipboard helpers. tmux and screen need their escape wrappers
-// unless their clipboard passthrough is enabled.
-func copyToClipboard(text string) error {
+// clipboardSequence builds the OSC 52 sequence that puts text on the
+// terminal's clipboard. The sequence travels through the terminal, so it
+// works over SSH and needs no external clipboard helpers. tmux and screen
+// need their escape wrappers unless their clipboard passthrough is enabled.
+func clipboardSequence(text string) string {
 	seq := osc52.New(text)
 	term := os.Getenv("TERM")
 	switch {
@@ -26,6 +21,12 @@ func copyToClipboard(text string) error {
 	case strings.Contains(term, "screen"):
 		seq = seq.Screen()
 	}
-	_, err := seq.WriteTo(clipboardOut)
-	return err
+	return seq.String()
+}
+
+// copyToClipboard returns a command that copies text to the clipboard. Bubble
+// Tea writes the sequence itself, in order with the frames it draws, so the
+// two can never interleave.
+func copyToClipboard(text string) tea.Cmd {
+	return tea.Raw(clipboardSequence(text))
 }

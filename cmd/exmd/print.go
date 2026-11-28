@@ -98,6 +98,6 @@ func cmdPrint(args []string) int {
 	}
 
 	out := render.Render(res.Doc, width, th)
-	fmt.Println(render.PaintCanvas(strings.Join(out.Lines, "\n"), width, th))
+	fmt.Fprintln(stdout, render.PaintCanvas(strings.Join(out.Lines, "\n"), width, th))
 	return 0
 }
