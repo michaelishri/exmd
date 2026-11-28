@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // settingsView renders the settings panel in the sidebar slot. Colors come
@@ -21,13 +21,13 @@ func (m Model) settingsView(height int) string {
 
 	base := lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.Color(m.theme.BackgroundPanel)).
-		Foreground(lipgloss.Color(m.theme.Text))
-	title := base.Bold(true).Foreground(lipgloss.Color(m.theme.Bright))
+		Background(lipgloss.Color(string(m.theme.BackgroundPanel))).
+		Foreground(lipgloss.Color(string(m.theme.Text)))
+	title := base.Bold(true).Foreground(lipgloss.Color(string(m.theme.Bright)))
 	selected := lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.Color(m.theme.Primary)).
-		Foreground(lipgloss.Color(m.theme.Background)).
+		Background(lipgloss.Color(string(m.theme.Primary))).
+		Foreground(lipgloss.Color(string(m.theme.Background))).
 		Bold(true)
 
 	rows := make([]string, height)

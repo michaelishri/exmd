@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/michaelishri/exmd/internal/doc"
 )
@@ -19,9 +19,9 @@ func TestCtrlCQuitsFromSettings(t *testing.T) {
 		m := newViewer(t, 120, 40)
 		m = pressKey(m, runeKey(','))
 		if page == "themes" {
-			m = pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
+			m = pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 		}
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 		if cmd == nil {
 			t.Fatalf("%s: ctrl+c returned no command", page)
 		}
@@ -58,8 +58,9 @@ func TestKeysBeforeLayoutAreSafe(t *testing.T) {
 	keys := []tea.KeyMsg{
 		runeKey('`'), runeKey('j'), runeKey('k'), runeKey('g'), runeKey('G'),
 		runeKey('c'), runeKey('u'), runeKey('t'), runeKey(','), runeKey('v'),
-		{Type: tea.KeyEnter}, {Type: tea.KeyEsc}, {Type: tea.KeyTab},
-		{Type: tea.KeyDown}, {Type: tea.KeyUp},
+		tea.KeyPressMsg{Code: tea.KeyEnter}, tea.KeyPressMsg{Code: tea.KeyEsc},
+		tea.KeyPressMsg{Code: tea.KeyTab}, tea.KeyPressMsg{Code: tea.KeyDown},
+		tea.KeyPressMsg{Code: tea.KeyUp},
 	}
 	for _, sel := range []int{-1, 0} {
 		for _, k := range keys {
@@ -93,7 +94,7 @@ func TestQuitWhileRunOutlivesGrace(t *testing.T) {
 	}
 	m := newViewerFromDoc(t, 120, 40, path, nil)
 	m.blockSel = 0
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = mm.(Model)
 	batch, ok := cmd().(tea.BatchMsg)
 	if !ok {
@@ -116,5 +117,25 @@ func TestQuitWhileRunOutlivesGrace(t *testing.T) {
 	case <-st.finished:
 	case <-time.After(6 * time.Second):
 		t.Fatal("engine never finished the killed block")
+	}
+}
+
+// TestNoSidewaysScrolling: the document is laid out to the pane width, so
+// left, right, h and l must leave every frame unchanged.
+func TestNoSidewaysScrolling(t *testing.T) {
+	m := newViewer(t, 120, 40)
+	before := m.View().Content
+	for _, k := range []tea.KeyPressMsg{
+		{Code: tea.KeyRight}, {Code: tea.KeyLeft},
+		{Code: 'l', Text: "l"}, {Code: 'h', Text: "h"},
+	} {
+		m = pressKey(m, k)
+		if m.View().Content != before {
+			t.Fatalf("%s shifted the document", k.String())
+		}
+	}
+	mm, _ := m.Update(tea.MouseWheelMsg{X: 10, Y: 10, Button: tea.MouseWheelRight})
+	if mm.(Model).View().Content != before {
+		t.Fatal("a sideways wheel shifted the document")
 	}
 }

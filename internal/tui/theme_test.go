@@ -4,10 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )
@@ -17,9 +16,7 @@ import (
 // forces an ANSI profile so the dark theme is expected to carry color even
 // though the test process has no TTY.
 func TestSetThemeSetsViewerStyles(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.ANSI)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.ANSI)()
 	defer SetTheme(theme.Dark)
 
 	SetTheme(theme.Dark)
@@ -48,14 +45,12 @@ func TestSetThemeSetsViewerStyles(t *testing.T) {
 // background on every row — including blank rows, the sidebar and the
 // footer — so no cell falls back to the terminal's palette.
 func TestViewPaintsCanvas(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 	SetTheme(theme.Dark)
 
 	m := newViewer(t, 120, 40)
-	view := m.View()
+	view := m.View().Content
 	canvas := "\x1b[48;2;14;14;17m"
 	lines := strings.Split(view, "\n")
 	if len(lines) != m.height {
@@ -74,14 +69,12 @@ func TestViewPaintsCanvas(t *testing.T) {
 // TestNottyViewIsPlain checks that the notty theme emits no SGR sequences,
 // even on a color-capable terminal.
 func TestNottyViewIsPlain(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 	SetTheme(theme.Notty)
 
 	m := newViewer(t, 120, 40)
-	got := m.View()
+	got := m.View().Content
 	if strings.Contains(got, "\x1b[38;") || strings.Contains(got, "\x1b[48;") {
 		t.Fatalf("notty view contains colors: %q", got)
 	}
@@ -90,9 +83,7 @@ func TestNottyViewIsPlain(t *testing.T) {
 // TestInlineBoxUsesThemeSurface checks that inline output shares the
 // executable surface from the theme rather than a package constant.
 func TestInlineBoxUsesThemeSurface(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 	SetTheme(theme.Dark)
 
@@ -103,7 +94,7 @@ func TestInlineBoxUsesThemeSurface(t *testing.T) {
 	m.inline[0] = st
 	m.rebuildInlineBox(0)
 
-	exec := "48;2;30;32;48m"
+	exec := trueColorSeq(theme.Dark.ExecPanel, true)
 	found := false
 	for _, line := range st.box {
 		if strings.Contains(line, exec) {
@@ -118,21 +109,19 @@ func TestInlineBoxUsesThemeSurface(t *testing.T) {
 // TestThemePreviewIsLocalToTheViewer: previewing a theme in one viewer must
 // not restyle another, nor change the theme new viewers start with.
 func TestThemePreviewIsLocalToTheViewer(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	defer SetTheme(theme.Dark)
 	SetTheme(theme.Dark)
 
 	a, b := newViewer(t, 120, 40), newViewer(t, 120, 40)
-	before := a.View()
+	before := a.View().Content
 	b = pressKey(b, runeKey(','))
-	b = pressKey(b, tea.KeyMsg{Type: tea.KeyEnter})
-	b = pressKey(b, tea.KeyMsg{Type: tea.KeyDown})
+	b = pressKey(b, tea.KeyPressMsg{Code: tea.KeyEnter})
+	b = pressKey(b, tea.KeyPressMsg{Code: tea.KeyDown})
 	if b.theme.Name == theme.Dark.Name {
 		t.Fatal("preview did not change the previewing viewer")
 	}
-	if a.View() != before {
+	if a.View().Content != before {
 		t.Fatal("another viewer was restyled by the preview")
 	}
 	if newViewer(t, 120, 40).theme.Name != theme.Dark.Name {

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/exec"
@@ -67,7 +67,8 @@ type Model struct {
 
 	overrides map[string]string
 	theme     theme.Theme
-	styles    styles // derived from theme
+	styles    styles               // derived from theme
+	profile   colorprofile.Profile // what the terminal can display
 
 	// blockSel is the executable block highlighted in the text area
 	// (index into the document's blocks); -1 when block selection is off.
@@ -130,18 +131,24 @@ func New(res *doc.Result, overrides map[string]string) Model {
 func NewWithSnapshot(res *doc.Result, overrides map[string]string, snap *session.Snapshot) Model {
 	m := Model{
 		doc:       res.Doc,
-		content:   viewport.New(0, 0),
+		content:   viewport.New(),
 		outline:   newOutline(),
 		focus:     focusContent,
 		overrides: overrides,
 		theme:     t,
 		styles:    newStyles(t),
+		profile:   startProfile,
 		blockSel:  -1,
 		inline:    map[int]*inlineState{},
 
 		saveEnabled: true,
 	}
 	m.content.MouseWheelEnabled = true
+	// The document is laid out to the pane width; there is nothing to scroll
+	// sideways, so left/right (and h/l) must not shift it.
+	m.content.SetHorizontalStep(0)
+	m.content.KeyMap.Left.SetEnabled(false)
+	m.content.KeyMap.Right.SetEnabled(false)
 	if s, err := session.New(res.Doc, overrides); err == nil {
 		m.snap = s
 		m.blockKeys = append([]string(nil), s.Keys...)
@@ -252,9 +259,7 @@ func cloneStringMap(m map[string]string) map[string]string {
 	return out
 }
 
-func (m Model) Init() tea.Cmd {
-	return tea.SetWindowTitle("exmd — " + termsafe.Strip(m.doc.HeadingText()))
-}
+func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -273,29 +278,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finalizeInline(msg.index, msg.result)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.ColorProfileMsg:
+		// The terminal's real capabilities, detected by Bubble Tea.
+		if msg.Profile != m.profile {
+			m.profile = msg.Profile
+			m.relayout()
+		}
+		return m, nil
+
+	case tea.KeyPressMsg:
 		if cmd, handled := m.handleKey(msg); handled {
 			return m, cmd
 		}
 
 	case tea.MouseMsg:
-		if m.handleMouse(msg) {
-			return m, nil
+		if cmd, handled := m.handleMouse(msg); handled {
+			return m, cmd
 		}
 		// Wheel events belong to the viewport; everything else is ignored.
-		prev := m.content.YOffset
+		prev := m.content.YOffset()
 		m.content, _ = m.content.Update(msg)
-		if m.content.YOffset != prev {
+		if m.content.YOffset() != prev {
 			m.updateSpy()
 		}
 		return m, nil
 	}
 
 	if m.focus == focusContent {
-		prev := m.content.YOffset
+		prev := m.content.YOffset()
 		var cmd tea.Cmd
 		m.content, cmd = m.content.Update(msg)
-		if m.content.YOffset != prev {
+		if m.content.YOffset() != prev {
 			m.updateSpy()
 		}
 		return m, cmd
@@ -304,60 +317,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleMouse drives text selection with the left button. It reports whether
-// the event was consumed; wheel events fall through to the viewport.
-func (m *Model) handleMouse(msg tea.MouseMsg) bool {
-	if tea.MouseEvent(msg).IsWheel() {
-		return false
-	}
-	switch {
-	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
-		if p, ok := m.mousePoint(msg); ok {
+// the event was consumed; wheel events fall through to the viewport. A
+// finished selection returns the command that copies it.
+func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
+	mouse := msg.Mouse()
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		if mouse.Button != tea.MouseLeft {
+			return nil, false
+		}
+		if p, ok := m.mousePoint(mouse); ok {
 			m.sel.anchor, m.sel.head = p, p
 			m.sel.set, m.sel.dragging = true, true
 		} else {
 			m.sel.clear()
 		}
 		m.paintSelection()
-		return true
+		return nil, true
 
-	case m.sel.dragging && msg.Action == tea.MouseActionMotion:
-		// Some terminals report a drag as a release event (see below).
-		if p, ok := m.mousePoint(msg); ok {
+	case tea.MouseMotionMsg:
+		if !m.sel.dragging {
+			return nil, false
+		}
+		if p, ok := m.mousePoint(mouse); ok {
 			m.sel.head = p
 			m.paintSelection()
 		}
-		return true
+		return nil, true
 
-	case msg.Action == tea.MouseActionRelease && m.sel.dragging:
+	case tea.MouseReleaseMsg:
+		if !m.sel.dragging {
+			return nil, false
+		}
 		// A release can carry the final pointer position.
-		if p, ok := m.mousePoint(msg); ok {
+		if p, ok := m.mousePoint(mouse); ok {
 			m.sel.head = p
 		}
 		m.sel.dragging = false
+		var cmd tea.Cmd
 		if from, to, ok := m.sel.ordered(); ok {
 			if text := selectionText(m.rawContentLines(), from, to); text != "" {
-				if err := copyToClipboard(text); err != nil {
-					m.flash = "copy failed: " + err.Error()
-				} else {
-					lines := to.line - from.line + 1
-					noun := "lines"
-					if lines == 1 {
-						noun = "line"
-					}
-					m.flash = fmt.Sprintf("copied %d %s from selection", lines, noun)
+				cmd = copyToClipboard(text)
+				lines := to.line - from.line + 1
+				noun := "lines"
+				if lines == 1 {
+					noun = "line"
 				}
+				m.flash = fmt.Sprintf("copied %d %s from selection", lines, noun)
 			}
 		}
 		m.sel.clear()
 		m.paintSelection()
-		return true
+		return cmd, true
 	}
-	return false
+	return nil, false
 }
 
 // handleKey dispatches a key to the global, outline or block handler. It
 // reports whether the key was consumed.
-func (m *Model) handleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	// A footer reaction lasts until the next key press. The handler that
 	// consumes this key may set a fresh one (notably `c` below).
 	m.flash = ""
@@ -391,7 +409,7 @@ func (m *Model) clearTransientState() {
 }
 
 // handleGlobalKey processes keys that work in every focus area.
-func (m *Model) handleGlobalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *Model) handleGlobalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.shutdownInline()
@@ -474,10 +492,6 @@ func (m *Model) copyBlockOutput() tea.Cmd {
 		m.flash = "no output to copy — run it with enter first"
 		return nil
 	}
-	if err := copyToClipboard(text); err != nil {
-		m.flash = "copy failed: " + err.Error()
-		return nil
-	}
 	lines := strings.Count(text, "\n") + 1
 	noun := "lines"
 	if lines == 1 {
@@ -487,7 +501,7 @@ func (m *Model) copyBlockOutput() tea.Cmd {
 	if st := m.inline[m.blockSel]; st != nil && st.stale {
 		m.flash += " — stale output, rerun with enter to refresh"
 	}
-	return nil
+	return copyToClipboard(text)
 }
 
 // copyBlockURL copies a URL from the focused block's output. Each press
@@ -510,17 +524,13 @@ func (m *Model) copyBlockURL() tea.Cmd {
 	}
 	i := st.urlIndex % len(urls)
 	url := urls[i]
-	if err := copyToClipboard(url); err != nil {
-		m.flash = "copy failed: " + err.Error()
-		return nil
-	}
 	st.urlIndex = i + 1
 	if len(urls) == 1 {
 		m.flash = "copied URL: " + url
 	} else {
 		m.flash = fmt.Sprintf("copied URL %d/%d: %s", i+1, len(urls), url)
 	}
-	return nil
+	return copyToClipboard(url)
 }
 
 // focusedHasURL reports whether the footer should advertise the u shortcut.
@@ -534,7 +544,7 @@ func (m Model) focusedHasURL() bool {
 
 // handleOutlineKey moves the sidebar selection. The outline consumes every
 // key while it has focus.
-func (m *Model) handleOutlineKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *Model) handleOutlineKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "j", "down":
 		if m.outline.move(1) {
@@ -564,7 +574,7 @@ func (m *Model) handleOutlineKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 // handleBlockKey walks executable blocks, or scrolls the content when no
 // block is selected.
-func (m *Model) handleBlockKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *Model) handleBlockKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if m.out == nil {
 		return nil, false // not laid out yet: there are no blocks to walk
 	}
@@ -651,11 +661,11 @@ func (m *Model) relayout() {
 	m.blankRow = " "
 	m.gutterRow = strings.Repeat(" ", gutterWidth)
 
-	m.content.Width = contentW
+	m.content.SetWidth(contentW)
 	// The text area carries 1 padding row at its top and bottom — the
 	// same insets as the sidebar — so the viewport shows the body
 	// height minus those two rows.
-	m.content.Height = max(1, bodyH-paneInsets)
+	m.content.SetHeight(max(1, bodyH-paneInsets))
 
 	th := m.theme
 	if !m.colorEnabled() {
@@ -777,8 +787,8 @@ func (m *Model) revealBlock() {
 		return
 	}
 	bm := m.out.Blocks[m.blockSel]
-	top := m.content.YOffset
-	bottom := top + m.content.Height
+	top := m.content.YOffset()
+	bottom := top + m.content.Height()
 	// Compare in display coordinates, accounting for an inline output box
 	// inserted earlier in the document.
 	line, end := m.displayLine(bm.Line), m.displayLine(bm.End)
@@ -790,7 +800,7 @@ func (m *Model) revealBlock() {
 		m.content.SetYOffset(clamp(line, 0, m.maxScroll()))
 	default:
 		// Below the viewport: pin its last line to the bottom.
-		m.content.SetYOffset(clamp(end-m.content.Height, 0, m.maxScroll()))
+		m.content.SetYOffset(clamp(end-m.content.Height(), 0, m.maxScroll()))
 	}
 }
 
@@ -798,7 +808,7 @@ func (m *Model) maxScroll() int {
 	if m.out == nil {
 		return 0
 	}
-	return max(0, len(m.rawContentLines())-m.content.Height)
+	return max(0, len(m.rawContentLines())-m.content.Height())
 }
 
 // updateSpy mirrors the content scroll position into the sidebar cursor:
@@ -808,7 +818,7 @@ func (m *Model) updateSpy() {
 	if m.out == nil {
 		return
 	}
-	off := m.content.YOffset + 1
+	off := m.content.YOffset() + 1
 	idx := -1
 	if m.outline.tab == tabHeadings {
 		// Entries carry the rendered line of their heading. The first h1
@@ -850,7 +860,16 @@ func lastAtOrBefore(values []int, off int) int {
 // full-height sidebar on the right that carries the file path in its footer.
 // The finished frame is painted with the theme's canvas so no cell falls
 // back to the terminal's own background.
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	v := tea.NewView(m.frame())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	v.WindowTitle = "exmd — " + termsafe.Strip(m.doc.HeadingText())
+	return v
+}
+
+// frame renders the screen content.
+func (m Model) frame() string {
 	if !m.laidOut {
 		return m.paintCanvas("Loading…")
 	}
@@ -881,7 +900,7 @@ func (m Model) leftPaneView() string {
 	width := m.width
 	var body string
 	if m.outline.visible {
-		width = railWidth + m.content.Width + gutterWidth
+		width = railWidth + m.content.Width() + gutterWidth
 		gutter := make([]string, m.paneHeight)
 		for i := range gutter {
 			gutter[i] = m.gutterRow
@@ -913,8 +932,8 @@ func (m Model) leftPaneView() string {
 	// against the derived surface in several themes.
 	footerBg := theme.Lift(m.theme.BackgroundElement, 0.12)
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(footerForeground(m.theme, footerBg))).
-		Background(lipgloss.Color(footerBg))
+		Foreground(lipgloss.Color(string(footerForeground(m.theme, footerBg)))).
+		Background(lipgloss.Color(string(footerBg)))
 	blank := footerStyle.Render(strings.Repeat(" ", width))
 	rows := strings.Split(body, "\n")
 	return strings.Join(append(rows,
@@ -931,8 +950,8 @@ func (m Model) rightPaneView() string {
 		hints := m.settingsFooterText()
 		band := theme.Lift(m.theme.BackgroundPanel, 0.10)
 		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(footerForeground(m.theme, band))).
-			Background(lipgloss.Color(band))
+			Foreground(lipgloss.Color(string(footerForeground(m.theme, band)))).
+			Background(lipgloss.Color(string(band)))
 		blank := style.Width(m.outline.width).Render("")
 		text := style.Render(padRow("  "+hints, m.outline.width))
 		return strings.Join(append(strings.Split(m.settingsView(m.paneHeight), "\n"),
@@ -1035,8 +1054,8 @@ func (m Model) railView() string {
 	}
 	blockRows := func(index int) (int, int) {
 		bm := m.out.Blocks[index]
-		start := m.displayLine(bm.Line+1) - m.content.YOffset + 1
-		return start, m.displayLine(bm.End) - m.content.YOffset + 1
+		start := m.displayLine(bm.Line+1) - m.content.YOffset() + 1
+		return start, m.displayLine(bm.End) - m.content.YOffset() + 1
 	}
 
 	// The selection bar: the highlighted block, or the heading the
@@ -1049,7 +1068,7 @@ func (m Model) railView() string {
 		// The heading's rendered line index (0-based in out.Lines) as a
 		// pane row: the jump scrolls to renderLine-1, and the pane's top
 		// padding row shifts it one further.
-		r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset + 1
+		r := m.displayLine(m.outline.entries[m.outline.sel].renderLine) - m.content.YOffset() + 1
 		mark(r, r+1, m.styles.gutterBar)
 	}
 
@@ -1147,7 +1166,7 @@ func (m Model) buildContentLines() []string {
 	for i, l := range m.out.Lines {
 		if staleLines[i] {
 			marker := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(m.theme.Warning)).Render("  · stale")
+				Foreground(lipgloss.Color(string(m.theme.Warning))).Render("  · stale")
 			room := ansi.StringWidth(l) - ansi.StringWidth(marker)
 			if room > 0 {
 				l = ansi.Truncate(l, room, "") + marker
@@ -1238,5 +1257,5 @@ func clamp(v, lo, hi int) int {
 // colorEnabled reports whether content may carry ANSI color: the terminal
 // must support color and the active theme must not be notty.
 func (m Model) colorEnabled() bool {
-	return lipgloss.ColorProfile() != termenv.Ascii && m.theme.Name != theme.Notty.Name
+	return m.profile > colorprofile.ASCII && m.theme.Name != theme.Notty.Name
 }

@@ -4,10 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -46,10 +45,10 @@ func TestViewerLayout(t *testing.T) {
 	if m.outline.width != 50 {
 		t.Fatalf("sidebar width = %d, want 50", m.outline.width)
 	}
-	if m.content.Width != 120-50-gutterWidth-railWidth {
-		t.Fatalf("content width = %d", m.content.Width)
+	if m.content.Width() != 120-50-gutterWidth-railWidth {
+		t.Fatalf("content width = %d", m.content.Width())
 	}
-	v := m.View()
+	v := m.View().Content
 	// The reading surface has no header row or viewport frame.
 	if strings.Contains(v, "spec v1") {
 		t.Fatal("header chrome leaked into the view")
@@ -78,7 +77,7 @@ func TestViewerLayout(t *testing.T) {
 	if !strings.Contains(footer, "j/k scroll") {
 		t.Fatalf("footer missing hints: %q", footer)
 	}
-	leftWidth := railWidth + m.content.Width + gutterWidth
+	leftWidth := railWidth + m.content.Width() + gutterWidth
 	if got := string([]rune(footer)[leftWidth:]); !strings.HasPrefix(got, "  ../../examples/demo/demo.md") {
 		t.Fatalf("sidebar footer path is not left-aligned: %q", got)
 	}
@@ -86,8 +85,8 @@ func TestViewerLayout(t *testing.T) {
 		t.Fatalf("missing bottom margin row: %q", last)
 	}
 	// Viewer viewport: pane height minus the content's two padding rows.
-	if m.content.Height != 35 {
-		t.Fatalf("viewer viewport height = %d, want 35", m.content.Height)
+	if m.content.Height() != 35 {
+		t.Fatalf("viewer viewport height = %d, want 35", m.content.Height())
 	}
 	if m.paneHeight != 37 {
 		t.Fatalf("pane height = %d, want 37", m.paneHeight)
@@ -97,12 +96,10 @@ func TestViewerLayout(t *testing.T) {
 // TestSidebarSpansFullHeight checks that the sidebar surface reaches the
 // bottom of the viewport, including its footer and bottom blank rows.
 func TestSidebarSpansFullHeight(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	if len(lines) != m.height {
 		t.Fatalf("view has %d rows, want %d", len(lines), m.height)
 	}
@@ -122,15 +119,12 @@ func TestSidebarSpansFullHeight(t *testing.T) {
 // TestFooterBandSurface checks that the left footer is painted on a surface
 // lighter than the sidebar's raised shade.
 func TestFooterBandSurface(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	footer := lines[len(lines)-2]
-	want := termenv.TrueColor.
-		Color(string(theme.Lift(theme.Dark.BackgroundElement, 0.12))).Sequence(true)
+	want := trueColorSeq(theme.Lift(theme.Dark.BackgroundElement, 0.12), true)
 	if !strings.Contains(footer, want) {
 		t.Fatalf("footer has no lifted surface (%s): %q", want, footer)
 	}
@@ -139,11 +133,11 @@ func TestFooterBandSurface(t *testing.T) {
 func TestFooterIsContextAware(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	footer := func(m Model) string {
-		lines := strings.Split(m.View(), "\n")
+		lines := strings.Split(m.View().Content, "\n")
 		return ansi.Strip(lines[len(lines)-2])
 	}
 
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	if pad := ansi.Strip(lines[len(lines)-3]); strings.TrimSpace(pad) != "" {
 		t.Fatalf("row above the footer is not blank: %q", pad)
 	}
@@ -159,7 +153,7 @@ func TestFooterIsContextAware(t *testing.T) {
 	}
 
 	// Outline focus: navigation + jump hints.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = mm.(Model)
 	if f := footer(m); !strings.Contains(f, "j/k navigate") ||
 		!strings.Contains(f, "enter jump") {
@@ -167,7 +161,7 @@ func TestFooterIsContextAware(t *testing.T) {
 	}
 
 	// Block mode: block navigation + run hints.
-	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
+	mm, _ = m.Update(tea.KeyPressMsg{Code: '`', Text: string('`')})
 	m = mm.(Model)
 	if f := footer(m); !strings.Contains(f, "j/k blocks") ||
 		!strings.Contains(f, "enter run") || !strings.Contains(f, "r reload") ||
@@ -196,7 +190,7 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 	// Above the first heading the unified cursor rests on the title row
 	// (sel == -1). Tab focuses the sidebar, j moves to the next section and
 	// jumps the content to it.
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got := mm.(Model)
 	if got.focus != focusOutline {
 		t.Fatal("tab did not move focus to the sidebar")
@@ -205,29 +199,29 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 		t.Fatalf("initial sel = %d, want -1", got.outline.sel)
 	}
 
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got = mm.(Model)
 	if got.outline.sel != 0 {
 		t.Fatalf("sel = %d, want 0", got.outline.sel)
 	}
 	wantY := got.outline.entries[0].renderLine - 1
-	if got.content.YOffset != wantY {
-		t.Fatalf("YOffset = %d, want %d", got.content.YOffset, wantY)
+	if got.content.YOffset() != wantY {
+		t.Fatalf("YOffset = %d, want %d", got.content.YOffset(), wantY)
 	}
 
 	// k at the first entry moves up onto the title row and returns to the
 	// very top of the document.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'k', Text: string('k')})
 	got = mm.(Model)
 	if got.outline.sel != -1 {
 		t.Fatalf("sel after k = %d, want -1 (title)", got.outline.sel)
 	}
-	if got.content.YOffset != 0 {
-		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset)
+	if got.content.YOffset() != 0 {
+		t.Fatalf("YOffset after k = %d, want 0 (top of document)", got.content.YOffset())
 	}
 
 	// t switches to the Blocks tab.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 't', Text: string('t')})
 	got = mm.(Model)
 	if got.outline.tab != tabBlocks {
 		t.Fatal("t did not switch to blocks")
@@ -237,7 +231,7 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 	}
 
 	// Scroll-spy: jumping back to the content focus keeps one cursor.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got = mm.(Model)
 	if got.focus != focusContent {
 		t.Fatal("tab did not return focus to the content")
@@ -250,11 +244,11 @@ func TestViewerFocusAndNavigation(t *testing.T) {
 // override cursor-driven moves and snap the selection to the last entry.
 func TestListWalkNoSnapping(t *testing.T) {
 	m := newViewer(t, 120, 60)
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got := mm.(Model)
 	prev := got.outline.sel
 	for i := 0; i < len(got.outline.entries); i++ {
-		mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		mm, _ = got.Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 		got = mm.(Model)
 		if got.outline.sel != prev+1 {
 			t.Fatalf("step %d: sel = %d, want %d (cursor snapped)", i, got.outline.sel, prev+1)
@@ -262,7 +256,7 @@ func TestListWalkNoSnapping(t *testing.T) {
 		prev = got.outline.sel
 	}
 	// One past the end: the cursor stays.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	got = mm.(Model)
 	if got.outline.sel != len(got.outline.entries)-1 {
 		t.Fatalf("sel past the end = %d, want %d", got.outline.sel, len(got.outline.entries)-1)
@@ -274,7 +268,7 @@ func TestListWalkNoSnapping(t *testing.T) {
 // entry (the first h1 is the title row and is not among the entries).
 func TestViewerSpyFollowsScroll(t *testing.T) {
 	m := newViewer(t, 120, 40)
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: 'G', Text: string('G')})
 	got := mm.(Model)
 	// At the bottom of the document the current heading is the last one;
 	// the first h1 is the title row and is not among the entries.

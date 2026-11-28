@@ -4,18 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 // focusSidebarAndSelectFirstHeading tabs to the outline and moves the
 // cursor to the first entry.
 func focusSidebarAndSelectFirstHeading(t *testing.T, m Model) Model {
 	t.Helper()
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	mm, _ = mm.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	mm, _ = mm.(Model).Update(tea.KeyPressMsg{Code: 'j', Text: string('j')})
 	return mm.(Model)
 }
 
@@ -25,7 +24,7 @@ func focusSidebarAndSelectFirstHeading(t *testing.T, m Model) Model {
 func enterBlockModeFromFirstHeading(t *testing.T, m Model) Model {
 	t.Helper()
 	got := focusSidebarAndSelectFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: '`', Text: string('`')})
 	return mm.(Model)
 }
 
@@ -35,7 +34,7 @@ func enterBlockModeFromFirstHeading(t *testing.T, m Model) Model {
 func TestBacktickSelectsFirstBlock(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := focusSidebarAndSelectFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: '`', Text: string('`')})
 	got = mm.(Model)
 
 	if got.blockSel != 0 {
@@ -53,7 +52,7 @@ func TestBacktickSelectsFirstBlock(t *testing.T) {
 func TestEnterJumpsToHeading(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := focusSidebarAndSelectFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = mm.(Model)
 	if got.blockSel != -1 {
 		t.Fatalf("enter should not activate block mode (blockSel = %d)", got.blockSel)
@@ -64,7 +63,7 @@ func TestArrowsMoveBlocks(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
 	if got.blockSel != 1 {
 		t.Fatalf("blockSel after down = %d, want 1", got.blockSel)
@@ -73,7 +72,7 @@ func TestArrowsMoveBlocks(t *testing.T) {
 		t.Fatalf("sidebar sel = %d, want the selected block's heading %d",
 			got.outline.sel, got.headingForBlock())
 	}
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
 	if got.blockSel != 2 {
 		t.Fatalf("blockSel after down = %d, want 2", got.blockSel)
@@ -83,25 +82,25 @@ func TestArrowsMoveBlocks(t *testing.T) {
 			got.outline.sel, got.headingForBlock())
 	}
 
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyUp})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	got = mm.(Model)
 	if got.blockSel != 1 {
 		t.Fatalf("blockSel after up = %d, want 1", got.blockSel)
 	}
 
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'G', Text: string('G')})
 	got = mm.(Model)
 	if got.blockSel != len(got.doc.Blocks)-1 {
 		t.Fatalf("blockSel after G = %d, want the last", got.blockSel)
 	}
 
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'g', Text: string('g')})
 	got = mm.(Model)
 	if got.blockSel != 0 {
 		t.Fatalf("blockSel after g = %d, want 0", got.blockSel)
 	}
 
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyUp})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	got = mm.(Model)
 	if got.blockSel != 0 {
 		t.Fatalf("blockSel after up at the start = %d, want 0", got.blockSel)
@@ -112,9 +111,7 @@ func TestArrowsMoveBlocks(t *testing.T) {
 // spans its whole extent, starting at the badge's row (the first row under
 // the content's top padding).
 func TestBlockRailSpansBlock(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
@@ -122,8 +119,8 @@ func TestBlockRailSpansBlock(t *testing.T) {
 	bm := got.out.Blocks[0]
 	// The bar covers the code block (starting below its metadata row),
 	// not the badge line above it.
-	start := bm.Line + 1 - got.content.YOffset + 1
-	end := bm.End - got.content.YOffset + 1
+	start := bm.Line + 1 - got.content.YOffset() + 1
+	end := bm.End - got.content.YOffset() + 1
 	visible := 0
 	for r := 0; r < got.paneHeight; r++ {
 		if r >= start && r < end {
@@ -131,13 +128,13 @@ func TestBlockRailSpansBlock(t *testing.T) {
 		}
 	}
 
-	v := got.View()
+	v := got.View().Content
 	if n := strings.Count(v, "▌"); n != visible {
 		t.Fatalf("rail bar rows = %d, want %d (the block's visible extent)", n, visible)
 	}
 	// The badge's row carries no rail bar.
 	lines := strings.Split(v, "\n")
-	badgePane := bm.Line - got.content.YOffset + 1
+	badgePane := bm.Line - got.content.YOffset() + 1
 	if badgePane >= 0 && badgePane < got.paneHeight &&
 		strings.Contains(ansi.Strip(lines[badgePane]), "▌") {
 		t.Fatal("rail should start below the metadata row")
@@ -156,7 +153,7 @@ func TestEscapeReturnsToHeading(t *testing.T) {
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got = mm.(Model)
 	if got.blockSel != -1 {
 		t.Fatalf("blockSel = %d, want -1 after esc", got.blockSel)
@@ -170,17 +167,15 @@ func TestEscapeReturnsToHeading(t *testing.T) {
 // in place, appending its output under the code rather than switching to
 // run mode.
 func TestRunSelectedBlockInline(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = mm.(Model)
 	// While running, the gutter bar is orange.
-	if !strings.Contains(got.View(), got.styles.railRunActive.Render("▌")) {
+	if !strings.Contains(got.View().Content, got.styles.railRunActive.Render("▌")) {
 		t.Fatal("running block's rail should be bright orange")
 	}
 	got = pump(t, got, cmd)
@@ -231,23 +226,23 @@ func TestRunSelectedBlockInline(t *testing.T) {
 		t.Fatalf("no empty last row in the output box: %q", ansi.Strip(last))
 	}
 	// On success, the rail turns green.
-	if !strings.Contains(got.View(), got.styles.railDoneActive.Render("▌")) {
+	if !strings.Contains(got.View().Content, got.styles.railDoneActive.Render("▌")) {
 		t.Fatal("successful block's rail should be bright green")
 	}
 
 	// Moving the selection elsewhere leaves both the output and the
 	// executed block's status bar in place.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
 	if !strings.Contains(strings.Join(got.contentLines(), "\n"), "author:  Michael Ishri") {
 		t.Fatal("output disappeared when moving to another block")
 	}
-	if !strings.Contains(got.View(), got.styles.railDone.Render("▌")) {
+	if !strings.Contains(got.View().Content, got.styles.railDone.Render("▌")) {
 		t.Fatal("status bar disappeared when moving to another block")
 	}
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	got = mm.(Model)
-	if !strings.Contains(got.View(), got.styles.railDone.Render("▌")) {
+	if !strings.Contains(got.View().Content, got.styles.railDone.Render("▌")) {
 		t.Fatal("status bar disappeared when returning to heading selection")
 	}
 }
@@ -255,18 +250,16 @@ func TestRunSelectedBlockInline(t *testing.T) {
 // TestInlineOutputsPersistAcrossRuns checks that running a second block
 // does not reset the first block's output or its green status bar.
 func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m) // selects block 0
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown}) // block 1
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyDown}) // block 1
 	got = mm.(Model)
-	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd = got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 
 	content := strings.Join(got.contentLines(), "\n")
@@ -283,15 +276,15 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 
 	// Both blocks still carry their green status bar, at their own
 	// display positions (after the earlier box is accounted for).
-	viewLines := strings.Split(got.View(), "\n")
+	viewLines := strings.Split(got.View().Content, "\n")
 	for _, index := range []int{0, 1} {
 		wantStyle := got.styles.railDone
 		if index == got.blockSel {
 			wantStyle = got.styles.railDoneActive
 		}
 		bm := got.out.Blocks[index]
-		start := got.displayLine(bm.Line+1) - got.content.YOffset + 1
-		end := got.displayLine(bm.End) - got.content.YOffset + 1
+		start := got.displayLine(bm.Line+1) - got.content.YOffset() + 1
+		end := got.displayLine(bm.End) - got.content.YOffset() + 1
 		found := false
 		for r := start; r < end && r < got.paneHeight && r+1 < len(viewLines); r++ {
 			if strings.Contains(viewLines[r], wantStyle.Render("▌")) {
@@ -308,30 +301,28 @@ func TestInlineOutputsPersistAcrossRuns(t *testing.T) {
 // between inline runs in one session (SPEC.md §4.3): step 3 exports WORK,
 // step 9 reads it back.
 func TestInlineStateCarriesBetweenBlocks(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
 	// Move to step 3's block (index 3): WORK="$(mktemp -d)"; export WORK.
 	for i := 0; i < 3; i++ {
-		mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
+		mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		got = mm.(Model)
 	}
 	if got.blockSel != 3 {
 		t.Fatalf("blockSel = %d, want 3", got.blockSel)
 	}
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 	if !strings.Contains(strings.Join(got.inline[3].lines, "\n"), "workspace:") {
 		t.Fatalf("step 3 output missing: %v", got.inline[3].lines)
 	}
 
 	// Jump to the last block (step 9) and run it: it echoes WORK.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'G', Text: string('G')})
 	got = mm.(Model)
-	mm, cmd = got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd = got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 
 	out := strings.Join(got.inline[len(got.doc.Blocks)-1].lines, "\n")
@@ -343,20 +334,18 @@ func TestInlineStateCarriesBetweenBlocks(t *testing.T) {
 // TestInlineLastBlockOutputIsVisible checks that streaming output from the
 // final block scrolls into view as it arrives.
 func TestInlineLastBlockOutputIsVisible(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewer(t, 120, 40)
 	got := enterBlockModeFromFirstHeading(t, m)
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: 'G', Text: string('G')})
 	got = mm.(Model)
 	index := len(got.doc.Blocks) - 1
 	if got.blockSel != index {
 		t.Fatalf("blockSel = %d, want the last block %d", got.blockSel, index)
 	}
 
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = pump(t, mm.(Model), cmd)
 	if !got.inline[index].done {
 		t.Fatal("last block's inline run did not finish")
@@ -364,39 +353,37 @@ func TestInlineLastBlockOutputIsVisible(t *testing.T) {
 
 	bm := got.out.Blocks[index]
 	lastRow := got.displayLine(bm.End-1) + len(got.inline[index].box)
-	if got.content.YOffset+got.content.Height <= lastRow {
+	if got.content.YOffset()+got.content.Height() <= lastRow {
 		t.Fatalf("output not visible: offset=%d height=%d last row=%d",
-			got.content.YOffset, got.content.Height, lastRow)
+			got.content.YOffset(), got.content.Height(), lastRow)
 	}
 }
 
 // TestInlineFailureRailTurnsRed checks that a failing inline run marks the
 // block's gutter bar red.
 func TestInlineFailureRailTurnsRed(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 
 	m := newViewerFromDoc(t, 120, 40, "../../internal/exec/testdata/fail.md", nil)
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	mm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	got := mm.(Model)
 	// The whole short document fits on screen, so the spy starts at the
 	// last heading; move to the first one explicitly.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: 'g', Text: string('g')})
 	got = mm.(Model)
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'`'}})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: '`', Text: string('`')})
 	got = mm.(Model)
 	// Down to the second block, which exits non-zero.
-	mm, _ = got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ = got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
-	mm, cmd := got.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := got.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got = mm.(Model)
 	got = pump(t, got, cmd)
 
 	if got.inline[1].status == 0 {
 		t.Fatalf("expected a failing block, status = %d", got.inline[1].status)
 	}
-	if !strings.Contains(got.View(), got.styles.railFailActive.Render("▌")) {
+	if !strings.Contains(got.View().Content, got.styles.railFailActive.Render("▌")) {
 		t.Fatal("failed block's rail should be bright red")
 	}
 }

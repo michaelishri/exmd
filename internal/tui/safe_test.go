@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,14 +36,14 @@ func TestViewerNeutralizesControlCharacters(t *testing.T) {
 	}
 	for _, w := range []int{120, 60} {
 		m := newViewerFromDoc(t, w, 30, path, nil)
-		if r, ok := controlIn(m.View()); ok {
+		if r, ok := controlIn(m.View().Content); ok {
 			t.Fatalf("width %d: control %U reached the frame", w, r)
 		}
 		m = pressKey(m, runeKey('t'))
-		if r, ok := controlIn(m.View()); ok {
+		if r, ok := controlIn(m.View().Content); ok {
 			t.Fatalf("width %d, blocks tab: control %U reached the frame", w, r)
 		}
-		title := fmt.Sprint(m.Init()())
+		title := m.View().WindowTitle
 		if r, ok := controlIn(title); ok {
 			t.Fatalf("window title carries control %U: %q", r, title)
 		}

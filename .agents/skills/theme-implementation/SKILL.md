@@ -55,13 +55,25 @@ appears broken even though the rest of the UI changes. Never set
 `CodeBlock.Chroma` directly on the final style; register a named style and set
 `CodeBlock.Theme` instead. `TestThemeSwitchChangesCodeColors` guards this.
 
-### 3. An SGR `0` inside a color is not a reset
+### 3. Resets come in two spellings, and Lip Gloss no longer downsamples
+
+Glamour v2 writes resets as `ESC[m`; `appendGlamour` rewrites them to
+`ESC[0m` because the canvas and exec painters look for that form. Missing it
+leaves light-theme lines on the terminal's own background.
+
+Lip Gloss v2 always emits true color. Reducing colors for the terminal is the
+output layer's job: Bubble Tea does it for the viewer, and the CLI writes
+through `colorprofile` writers (`stdout`/`stderr` in `cmd/exmd/main.go`). The
+viewer's `colorEnabled` follows the profile Bubble Tea reports
+(`tea.ColorProfileMsg`); tests pick one with `useProfile`.
+
+### 4. An SGR `0` inside a color is not a reset
 
 `isReset` in `canvas.go` must only treat a **leading** `0`/empty parameter as a
 reset. Colors such as `#7b5d00` emit `38;2;123;93;0`; matching any `0` paints
 the canvas behind those tokens. `TestZeroChannelColorsAreNotResets` guards this.
 
-### 4. Use hue-preserving adjustment, not hand-editing palettes
+### 5. Use hue-preserving adjustment, not hand-editing palettes
 
 Light themes need darker code tokens; dark themes need brighter ones. Do **not**
 blend toward white/black — that desaturates and makes text look washed out.
@@ -71,14 +83,14 @@ until the token clears 4.5:1 against that theme's executable surface.
 text. Change this shared rule, not individual palettes, when readability is
 wrong across themes.
 
-### 5. Dark and light palettes are independent
+### 6. Dark and light palettes are independent
 
 Each theme owns its tokens. There is no shared palette between the two groups —
 changing one cannot affect the other. The only shared logic is the render-time
 contrast rule above. If fixing one group appears to break the other, the bug is
 in shared plumbing (registry, reset handling, adjustment), not in the palettes.
 
-### 6. Runtime switching updates every layer
+### 7. Runtime switching updates every layer
 
 `applyTheme` in `internal/tui/settings.go` must: set `m.theme = th` and
 `m.styles = newStyles(th)` (the viewer's own lipgloss styles), then
@@ -87,7 +99,7 @@ in shared plumbing (registry, reset handling, adjustment), not in the palettes.
 running one. Inline output rows are cached per theme (`boxTheme`). Passing a `color bool` instead of a
 theme anywhere will freeze part of the UI on the old palette.
 
-### 7. Derived surfaces need measured foregrounds
+### 8. Derived surfaces need measured foregrounds
 
 Footer bands use `Lift` with direction based on surface luminance (lighter on
 dark themes, darker on light themes). Their foreground comes from `ReadableOn`

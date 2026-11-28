@@ -9,10 +9,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )
@@ -133,9 +132,7 @@ func TestURLCacheFollowsOutput(t *testing.T) {
 // redrawn with the new theme's colors.
 func TestThemeChangeRepaintsOutput(t *testing.T) {
 	defer SetTheme(theme.Dark)
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
+	defer useProfile(colorprofile.TrueColor)()
 	m := newViewer(t, 120, 40)
 	st := m.stateFor(0)
 	st.done = true
@@ -165,7 +162,7 @@ func TestHeavyOutputStaysResponsive(t *testing.T) {
 	m := newViewerFromDoc(t, 120, 40, path, nil)
 	m.blockSel = 0
 	start := time.Now()
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = mm.(Model)
 	batch, ok := cmd().(tea.BatchMsg)
 	if !ok || len(batch) != 2 {

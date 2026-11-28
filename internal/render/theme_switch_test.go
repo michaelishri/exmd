@@ -4,9 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
 	"github.com/michaelishri/exmd/internal/theme"
 )
 
@@ -14,9 +11,6 @@ import (
 // style registry pinning code colors to the first theme rendered in the
 // process. Rendering themes in sequence must produce each theme's colors.
 func TestThemeSwitchChangesCodeColors(t *testing.T) {
-	prevProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(prevProfile)
 
 	d := loadDemo(t)
 	codeLine := func(out *Output) string {

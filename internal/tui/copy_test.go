@@ -1,27 +1,42 @@
 package tui
 
 import (
-	"bytes"
 	"encoding/base64"
-	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// captureClipboard swaps the OSC 52 destination for the duration of fn and
-// returns the raw bytes that would have gone to the terminal.
+// clipboardLog collects the raw sequences that commands returned by the
+// test helpers asked Bubble Tea to write (tea.Raw).
+var clipboardLog strings.Builder
+
+// recordRaw runs cmd, as Bubble Tea would, and records any raw output.
+func recordRaw(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.RawMsg:
+		clipboardLog.WriteString(fmt.Sprint(msg.Msg))
+	case tea.BatchMsg:
+		for _, c := range msg {
+			recordRaw(c)
+		}
+	}
+}
+
+// captureClipboard returns what fn's key and mouse events wrote to the
+// terminal's clipboard.
 func captureClipboard(t *testing.T, fn func()) string {
 	t.Helper()
-	prev := clipboardOut
-	var buf bytes.Buffer
-	clipboardOut = &buf
 	t.Setenv("TERM", "xterm-256color")
-	defer func() { clipboardOut = prev }()
+	clipboardLog.Reset()
 	fn()
-	return buf.String()
+	return clipboardLog.String()
 }
 
 // clipPayload decodes the text carried by the first OSC 52 copy sequence.
@@ -47,12 +62,13 @@ func clipPayload(t *testing.T, seq string) string {
 // runSelectedBlock presses r and pumps the inline execution to completion.
 func runSelectedBlock(t *testing.T, m Model) Model {
 	t.Helper()
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	return pump(t, mm.(Model), cmd)
 }
 
 func pressCopy(m Model) Model {
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Text: string('c')})
+	recordRaw(cmd)
 	return mm.(Model)
 }
 
@@ -90,7 +106,7 @@ func TestCopyFocusedBlockOutput(t *testing.T) {
 func TestCopyFollowsBlockSelection(t *testing.T) {
 	got := enterBlockModeFromFirstHeading(t, newViewer(t, 120, 40))
 	got = runSelectedBlock(t, got) // block 0
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
 	got = runSelectedBlock(t, got) // block 1
 
@@ -129,23 +145,6 @@ func TestCopyWithoutSelection(t *testing.T) {
 	}
 }
 
-type errWriter struct{ err error }
-
-func (w errWriter) Write([]byte) (int, error) { return 0, w.err }
-
-func TestCopyFailureIsReported(t *testing.T) {
-	got := runSelectedBlock(t, enterBlockModeFromFirstHeading(t, newViewer(t, 120, 40)))
-	prev := clipboardOut
-	clipboardOut = errWriter{err: errors.New("terminal unavailable")}
-	t.Setenv("TERM", "xterm-256color")
-	defer func() { clipboardOut = prev }()
-
-	got = pressCopy(got)
-	if !strings.Contains(got.flash, "copy failed: terminal unavailable") {
-		t.Fatalf("footer reaction = %q, want the write error", got.flash)
-	}
-}
-
 // TestCopiedText checks the plain-text assembly directly, including a partial
 // line still accumulating while a block runs.
 func TestCopiedText(t *testing.T) {
@@ -173,8 +172,8 @@ func TestCopiedText(t *testing.T) {
 func TestCopyKeepsFullWidthLines(t *testing.T) {
 	got := runSelectedBlock(t, enterBlockModeFromFirstHeading(t,
 		newViewerFromDoc(t, 120, 40, "testdata/long_output.md", nil)))
-	if got.content.Width >= 200 {
-		t.Fatalf("test needs output wider than the pane (width = %d)", got.content.Width)
+	if got.content.Width() >= 200 {
+		t.Fatalf("test needs output wider than the pane (width = %d)", got.content.Width())
 	}
 	seq := captureClipboard(t, func() { got = pressCopy(got) })
 	text := clipPayload(t, seq)
@@ -192,12 +191,12 @@ func TestCopyFlashClearsOnNextKey(t *testing.T) {
 	if got.flash == "" {
 		t.Fatal("copy did not leave a footer reaction")
 	}
-	mm, _ := got.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mm, _ := got.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	got = mm.(Model)
 	if got.flash != "" {
 		t.Fatalf("footer reaction persisted after the next key: %q", got.flash)
 	}
-	lines := strings.Split(got.View(), "\n")
+	lines := strings.Split(got.View().Content, "\n")
 	footer := ansi.Strip(lines[len(lines)-2])
 	if !strings.Contains(footer, "j/k blocks") || !strings.Contains(footer, "c copy") {
 		t.Fatalf("key hints did not return: %q", footer)
@@ -215,20 +214,28 @@ func TestCopySequenceWrapsForTmuxAndScreen(t *testing.T) {
 	} {
 		t.Run(tt.term, func(t *testing.T) {
 			t.Setenv("TERM", tt.term)
-			prev := clipboardOut
-			var buf bytes.Buffer
-			clipboardOut = &buf
-			defer func() { clipboardOut = prev }()
-
-			if err := copyToClipboard("clip"); err != nil {
-				t.Fatalf("copyToClipboard: %v", err)
+			seq := clipboardSequence("clip")
+			if !strings.HasPrefix(seq, tt.want) {
+				t.Fatalf("sequence = %q, want prefix %q", seq, tt.want)
 			}
-			if !strings.HasPrefix(buf.String(), tt.want) {
-				t.Fatalf("sequence = %q, want prefix %q", buf.String(), tt.want)
-			}
-			if text := clipPayload(t, buf.String()); text != "clip" {
+			if text := clipPayload(t, seq); text != "clip" {
 				t.Fatalf("decoded text = %q, want clip", text)
 			}
 		})
+	}
+}
+
+// TestCopyGoesThroughBubbleTea: the clipboard sequence is handed to Bubble
+// Tea as a raw write, so it reaches the terminal in order with the frames it
+// draws instead of racing them.
+func TestCopyGoesThroughBubbleTea(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	msg := copyToClipboard("clip")()
+	raw, ok := msg.(tea.RawMsg)
+	if !ok {
+		t.Fatalf("copy command produced %T, want tea.RawMsg", msg)
+	}
+	if text := clipPayload(t, fmt.Sprint(raw.Msg)); text != "clip" {
+		t.Fatalf("decoded text = %q, want clip", text)
 	}
 }

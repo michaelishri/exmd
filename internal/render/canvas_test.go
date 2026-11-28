@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/michaelishri/exmd/internal/theme"
 )
@@ -93,7 +92,7 @@ func TestZeroChannelColorsAreNotResets(t *testing.T) {
 		if c == "" || !strings.Contains(string(c), "00") {
 			continue
 		}
-		fg := "\x1b[" + termenv.TrueColor.Color(string(c)).Sequence(false) + "m"
+		fg := "\x1b[" + trueColorSeq(c, false) + "m"
 		if strings.Contains(code, fg+canvas) {
 			t.Errorf("%s color %q was treated as a reset and painted with the canvas", name, c)
 		}

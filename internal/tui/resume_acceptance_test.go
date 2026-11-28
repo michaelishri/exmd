@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/michaelishri/exmd/internal/doc"
 	"github.com/michaelishri/exmd/internal/session"
@@ -92,7 +92,7 @@ func TestAcceptanceQuitMidRunSavesRealSnapshot(t *testing.T) {
 
 	m := newViewerFromDoc(t, 120, 40, path, nil)
 	m.blockSel = 0
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	// Run the tea cmds in goroutines, as the Bubble Tea runtime does, so the
 	// block is still in flight when the quit key arrives.
 	if batch, ok := cmd().(tea.BatchMsg); ok {
@@ -101,7 +101,7 @@ func TestAcceptanceQuitMidRunSavesRealSnapshot(t *testing.T) {
 		}
 	}
 	time.Sleep(50 * time.Millisecond)
-	mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	mm.Update(tea.KeyPressMsg{Code: 'q', Text: string('q')})
 
 	s := savedSnapshotFor(t, path)
 	if len(s.Blocks) != 1 || s.Blocks[0].Active || !s.Blocks[0].Done {

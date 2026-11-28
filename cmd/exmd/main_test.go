@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/michaelishri/exmd/internal/config"
 	"github.com/michaelishri/exmd/internal/theme"
@@ -192,7 +192,7 @@ func TestDiagnosticThemeFollowsSelection(t *testing.T) {
 
 	setDiagnosticTheme(theme.CatppuccinLatte)
 	want := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.CatppuccinLatte.Error)).Render("x")
+		Foreground(lipgloss.Color(string(theme.CatppuccinLatte.Error))).Render("x")
 	if got := styleErr.Render("x"); got != want {
 		t.Errorf("diagnostic style = %q, want %q", got, want)
 	}

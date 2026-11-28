@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -55,17 +55,17 @@ func (m Model) contentOrigin() (int, int) {
 
 // mousePoint maps a mouse event to a point in the rendered document. Events
 // outside the content pane (rail, gutter, sidebar, footer) are rejected.
-func (m Model) mousePoint(msg tea.MouseMsg) (selPoint, bool) {
+func (m Model) mousePoint(msg tea.Mouse) (selPoint, bool) {
 	if m.out == nil {
 		return selPoint{}, false
 	}
 	ox, oy := m.contentOrigin()
 	col, row := msg.X-ox, msg.Y-oy
-	if col < 0 || col >= m.content.Width || row < 0 || row >= m.content.Height {
+	if col < 0 || col >= m.content.Width() || row < 0 || row >= m.content.Height() {
 		return selPoint{}, false
 	}
 	lines := m.rawContentLines()
-	line := clamp(m.content.YOffset+row, 0, max(0, len(lines)-1))
+	line := clamp(m.content.YOffset()+row, 0, max(0, len(lines)-1))
 	col = clamp(col, 0, ansi.StringWidth(ansi.Strip(lines[line])))
 	return selPoint{line: line, col: col}, true
 }

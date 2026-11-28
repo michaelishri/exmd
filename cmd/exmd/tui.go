@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 
 	"github.com/michaelishri/exmd/internal/config"
@@ -76,7 +76,7 @@ func loadForViewer(path string) (*doc.Result, int) {
 	res.Sort()
 	printDiagnostics(res)
 	if res.HasErrors() {
-		fmt.Fprintln(os.Stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
+		fmt.Fprintln(stderr, styleDim.Render("fix the issues above; `exmd check` reports them all at once"))
 		return nil, 2
 	}
 	return res, 0
@@ -109,7 +109,7 @@ func launchTUI(res *doc.Result, overrides map[string]string, snap *session.Snaps
 	if !saveSessions {
 		model = model.WithoutSessionSaving()
 	}
-	final, err := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	final, err := tea.NewProgram(model).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "exmd: %v\n", err)
 		return 2

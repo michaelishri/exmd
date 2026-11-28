@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/michaelishri/exmd/internal/theme"
 )
 
 // TestMain keeps every test's automatic session saves inside a temporary
@@ -45,4 +49,23 @@ func pump(t *testing.T, m Model, initial tea.Cmd) Model {
 		}
 	}
 	return m
+}
+
+// useProfile makes new viewers assume the given color profile and returns a
+// function that restores the previous one.
+func useProfile(p colorprofile.Profile) func() {
+	prev := startProfile
+	SetColorProfile(p)
+	return func() { SetColorProfile(prev) }
+}
+
+// trueColorSeq is the SGR parameter string lipgloss emits for a theme color:
+// 38;2;R;G;B for a foreground, 48;2;R;G;B for a background.
+func trueColorSeq(c theme.Color, bg bool) string {
+	r, g, b, _ := lipgloss.Color(string(c)).RGBA()
+	kind := 38
+	if bg {
+		kind = 48
+	}
+	return fmt.Sprintf("%d;2;%d;%d;%d", kind, r>>8, g>>8, b>>8)
 }
